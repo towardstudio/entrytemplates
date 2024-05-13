@@ -1,0 +1,36 @@
+{
+	"name": "towardstudio/entry-templates",
+	"description": "Create pre-filled templates which can be selected within entries.",
+	"type": "craft-plugin",
+	"version": "1.0.0",
+	"license": "MIT",
+	"authors": [
+		{
+			"name": "Toward Studio",
+			"homepage": "https://toward.studio"
+		}
+	],
+	"require": {
+		"craftcms/cms": "^4.0.0"
+	},
+	"autoload": {
+		"psr-4": {
+			"towardstudio\\entrytemplates\\": "src/"
+		}
+	},
+	"extra": {
+		"name": "Entry Templates",
+		"handle": "entrytemplates",
+		"developer": "Toward Studio",
+		"developerUrl": "https://toward.studio",
+		"documentationUrl": "https://github.com/towardstudio/entry-templates/blob/main/README.md",
+		"changelogUrl": "https://raw.githubusercontent.com/towardstudio/entry-templates/main/CHANGELOG.md",
+		"class": "towardstudio\\entrytemplates\\EntryTemplates"
+	},
+	"config": {
+		"allow-plugins": {
+			"yiisoft/yii2-composer": true,
+			"craftcms/plugin-installer": true
+		}
+	}
+}

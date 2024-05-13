@@ -1,0 +1,15 @@
+{% import '_includes/forms' as forms %}
+
+<div class="settings">
+    {{ forms.autosuggestField({
+        label: 'Preview Source'|t('entrytemplates'),
+        instructions: 'The path of the folder to select content template previews from.'|t('entrytemplates'),
+        id: 'previewSource',
+        name: 'previewSource',
+        suggestEnvVars: true,
+        suggestAliases: true,
+        value: settings.previewSource,
+        required: true,
+        errors: settings.getErrors('previewSource'),
+    }) }}
+</div>

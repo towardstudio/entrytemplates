@@ -1,0 +1,22 @@
+{% extends '_layouts/elementindex' %}
+
+{% set title = 'Entry Templates'|t('entrytemplates') %}
+{% set elementType = 'towardstudio\\entrytemplates\\elements\\EntryTemplate' %}
+{% do view.registerAssetBundle("towardstudio\\entrytemplates\\assetbundles\\TemplateAsset") %}
+{% set canHaveDrafts = true %}
+
+{% do view.registerTranslations('app', [
+    'New template',
+]) %}
+
+{% js %}
+  window.ContentTemplates = {
+    IndexSettings: {{ settings|json_encode|raw }}
+  }
+{% endjs %}
+
+{% if sectionAndEntryTypeHandles is defined %}
+    {% js %}
+        window.defaultSectionAndEntryTypeHandles = "{{ sectionAndEntryTypeHandles|e('js') }}";
+    {% endjs %}
+{% endif %}
