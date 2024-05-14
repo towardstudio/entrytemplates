@@ -1,6 +1,6 @@
 # Entry Templates plugin for Craft CMS 4.x
 
-When an entry is deleted, a reminder will display for the user to add a redirect.
+Scaffold Entry Type Templates to use for a user to start with on new entries.
 
 ## Requirements
 
@@ -22,7 +22,7 @@ cd /path/to/project/craft
 composer require towardstudio/entry-templates
 ```
 
-3. In the Control Panel, go to Settings → Plugins and click the “Install” button for Redirect Reminder
+3. In the Control Panel, go to Settings → Plugins and click the “Install” button for Entry Templates
 
 [Toward Disclaimer](https://github.com/towardstudio/toward-open-source-disclaimer)
 
