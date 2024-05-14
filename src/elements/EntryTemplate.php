@@ -323,7 +323,7 @@ class EntryTemplate extends Element
             'title' => $this->title,
             'type' => $this->getEntryType()->uid,
             'previewImage' => $this->previewImage,
-            'content' => $this->_sanitiseFieldValues(),
+            'content' => $this->_sanitiseContent(),
             'description' => method_exists($request, 'getBodyParam')
                 ? $this->description ?? $request->getBodyParam('description')
                 : $this->description,
@@ -337,7 +337,7 @@ class EntryTemplate extends Element
      * - Removes  Matrix / Super Table block IDs from field values
      * - Converts SEO field data to an array format
      */
-    private function _sanitiseFieldValues(
+    private function _sanitiseContent(
         ?array $serializedValues = null,
         ?int $fieldLayoutId = null
     ): array {
@@ -370,13 +370,13 @@ class EntryTemplate extends Element
             switch (get_class($field)) {
                 case MatrixField::class:
                 case SuperTableField::class:
-                    $serializedValues[$fieldHandle] = $this->_sanitiseBlockElementFieldValue(
+                    $serializedValues[$fieldHandle] = $this->_sanitiseContentFields(
                         $serializedValues[$fieldHandle],
                         $field,
                     );
                     break;
                 case SeoField::class:
-                    $serializedValues[$fieldHandle] = $this->_sanitiseSeoFieldValue($serializedValues[$fieldHandle]);
+                    $serializedValues[$fieldHandle] = $this->_sanitiseSeoPluginValue($serializedValues[$fieldHandle]);
             };
         }
 
@@ -386,7 +386,7 @@ class EntryTemplate extends Element
     /**
      * Removes Matrix / Super Table block IDs from field values.
      */
-    private function _sanitiseBlockElementFieldValue(array $fieldValue, FieldInterface $field): array
+    private function _sanitiseContentFields(array $fieldValue, FieldInterface $field): array
     {
         $fieldClass = get_class($field);
         $i = 1;
@@ -405,7 +405,7 @@ class EntryTemplate extends Element
                     ->getBlockTypeById($blockValue['type'])
                     ->fieldLayoutId,
             };
-            $blockValue['fields'] = $this->_sanitiseFieldValues(
+            $blockValue['fields'] = $this->_sanitiseContent(
                 $blockValue['fields'],
                 $blockLayoutId,
             );
@@ -419,7 +419,7 @@ class EntryTemplate extends Element
     /**
      * Converts SEO field data to an array format.
      */
-    private function _sanitiseSeoFieldValue(mixed $fieldValue): array
+    private function _sanitiseSeoPluginValue(mixed $fieldValue): array
     {
         $socialValue = [];
 
