@@ -13,8 +13,10 @@ use craft\events\DefineHtmlEvent;
 use craft\events\ModelEvent;
 use craft\events\RegisterComponentTypesEvent;
 use craft\events\RegisterUrlRulesEvent;
+use craft\events\RegisterUserPermissionsEvent;
 use craft\helpers\Json;
 use craft\services\Elements;
+use craft\services\UserPermissions;
 use craft\web\View;
 use craft\web\UrlManager;
 
@@ -71,24 +73,31 @@ class EntryTemplates extends Plugin
         $this->_registerCPRules();
         $this->_registerLogger();
         $this->_registerSidebar();
-        // $this->_registerModal();
+        $this->_registerPermissions();
 	}
 
     // Rename the Control Panel Item & Add Sub Menu
 	public function getCpNavItem(): ?array
 	{
+        // Get current user
+        $currentUser = Craft::$app->getUser()->getIdentity();
+
 		// Get the site info
 		$handle = Craft::$app->sites->currentSite->handle;
 		$url = Craft::$app->sites->currentSite->baseUrl;
 
-		// Set additional information on the nav item
-		$item = parent::getCpNavItem();
+        if ($currentUser->can('entrytemplates:dashboard')) {
+            // Set additional information on the nav item
+		    $item = parent::getCpNavItem();
 
-        // Nav Item
-		$item["label"] = "Entry Templates";
-		$item["icon"] = "@entrytemplates/icons/nav.svg";
+            // Nav Item
+		    $item["label"] = "Entry Templates";
+		    $item["icon"] = "@entrytemplates/icons/nav.svg";
 
-		return $item;
+		    return $item;
+        } else {
+            return null;
+        }
 	}
 
     // Private Methods
@@ -196,6 +205,28 @@ class EntryTemplates extends Plugin
         );
     }
 
+    /**
+     * Registers permissions
+     */
+    private function _registerPermissions(): void
+    {
+        Event::on(
+            UserPermissions::class,
+            UserPermissions::EVENT_REGISTER_PERMISSIONS,
+            function(RegisterUserPermissionsEvent $event) {
+                Craft::debug(
+                    'UserPermissions::EVENT_REGISTER_PERMISSIONS',
+                    __METHOD__
+                );
+                // Register our custom permissions
+                $event->permissions[] = [
+                    'heading' => 'Entry Templates',
+                    'permissions' => $this->customAdminCpPermissions(),
+                ];
+            }
+        );
+    }
+
     // Protected Methods
 	// =========================================================================
 
@@ -232,4 +263,28 @@ class EntryTemplates extends Plugin
             'settings' => $this->getSettings(),
         ]);
     }
+
+    /**
+     * Returns the custom Control Panel user permissions.
+     *
+     * @return array
+     * @noinspection PhpArrayShapeAttributeCanBeAddedInspection
+     */
+    protected function customAdminCpPermissions(): array
+    {
+        // The script meta containers for the global meta bundle
+        try {
+            $currentSiteId = Craft::$app->getSites()->getCurrentSite()->id ?? 1;
+        } catch (SiteNotFoundException $e) {
+            $currentSiteId = 1;
+            Craft::error($e->getMessage(), __METHOD__);
+        }
+
+        return [
+            'entrytemplates:dashboard' => [
+                'label' => "Templates",
+            ],
+        ];
+    }
+
 }
