@@ -6,11 +6,8 @@ use Craft;
 use craft\base\Element;
 use craft\base\Model;
 use craft\base\Plugin;
-use craft\controllers\ElementsController;
 use craft\elements\Entry;
-use craft\events\DefineElementEditorHtmlEvent;
 use craft\events\DefineHtmlEvent;
-use craft\events\ModelEvent;
 use craft\events\RegisterComponentTypesEvent;
 use craft\events\RegisterUrlRulesEvent;
 use craft\events\RegisterUserPermissionsEvent;
@@ -24,7 +21,6 @@ use craft\web\UrlManager;
 /* Plugin */
 use towardstudio\entrytemplates\assetbundles\ModalAsset;
 use towardstudio\entrytemplates\elements\EntryTemplate as EntryTemplateElements;
-use towardstudio\entrytemplates\models\Settings as SettingsModel;
 use towardstudio\entrytemplates\services\PreviewImages;
 
 /* Yii */
@@ -48,8 +44,6 @@ class EntryTemplates extends Plugin
 
 	public static ?EntryTemplates $plugin;
     public bool $hasCpSection = true;
-	public bool $hasCpSettings = true;
-	public static ?SettingsModel $settings;
 
 	/**
 	 * @inheritdoc
@@ -58,7 +52,6 @@ class EntryTemplates extends Plugin
 	{
 		parent::init();
 		self::$plugin = $this;
-        self::$settings = $this->getSettings();
 
         // Create Custom Alias
 		Craft::setAlias('@entrytemplates', __DIR__);
@@ -244,14 +237,6 @@ class EntryTemplates extends Plugin
             "entrytemplates/<sectionHandle:{handle}>/<entryTypeHandle:{handle}>" => "entrytemplates/templates/index",
             "entrytemplates/<sectionHandle:{handle}>/<entryTypeHandle:{handle}>/<elementId:\d+>" => "elements/edit",
         ];
-    }
-
-    /**
-     * @inheritdoc
-     */
-    protected function createSettingsModel(): ?Model
-    {
-        return new SettingsModel();
     }
 
     /**

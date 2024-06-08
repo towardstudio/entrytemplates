@@ -15,12 +15,18 @@
 }
 
 
+.modal_body {
+    height: 100%;
+    padding: 1.2rem;
+    overflow-y:scroll
+}
+
 .modal_heading {
     text-align: center;
     padding: 1rem 0;
 }
 
-.modal_container {
+.modal_inner {
     display: flex;
     flex-flow: row wrap;
     justify-content: center;

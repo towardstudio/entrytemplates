@@ -37,8 +37,6 @@ Craft.EntryTemplates.Modal = Garnish.Base.extend({
                         e.append($("<img />").attr("src", this.preview))
                 }
 
-                console.log(this);
-
                 if (this.description !== null) {
                     t.append($('<p />').text(this.description))
                 }
@@ -84,10 +82,9 @@ Craft.EntryTemplates.Modal = Garnish.Base.extend({
             self.garnishModal.show();
         });
 
-        console.log(this.$settings);
-
-        const s = $('<div class="body" />').appendTo(n).append($('<h2 class="modal_heading" />').text(Craft.t("entrytemplates", "Choose a template"))),
-            o = $('<div class="modal_container" />').appendTo(s);
+        const s = $('<div class="modal_body" />').appendTo(n).append($('<h2 class="modal_heading" />').text(Craft.t("entrytemplates", "Choose a template"))),
+            o = $('<div class="modal_container" />').appendTo(s),
+            m = $('<div class="modal_inner" />').appendTo(o);
 
         const elements = this.$elements;
         const settings = this.$settings;
@@ -102,7 +99,7 @@ Craft.EntryTemplates.Modal = Garnish.Base.extend({
 
         this.contentTemplates.forEach((t => {
 
-            $('<div class="modal_block" />').append(t.$button).appendTo(o), t.$button.on("activate", (e => {
+            $('<div class="modal_block" />').append(t.$button).appendTo(m), t.$button.on("activate", (e => {
                 if (void 0 === t.id) this.garnishModal.hide();
                 else {
                     n.addClass("applying");

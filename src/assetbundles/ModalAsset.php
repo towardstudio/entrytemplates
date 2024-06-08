@@ -25,7 +25,7 @@ class ModalAsset extends AssetBundle
         ];
 
         $this->js = [
-            'js/modal.js',
+            'js/dist/modal.min.js',
         ];
 
         parent::init();
