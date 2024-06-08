@@ -173,6 +173,7 @@ class EntryTemplates extends Plugin
                     ->collect();
 
                 if (!$entryTemplates->isEmpty()) {
+                    $html = '';
                     // Register Modal JS
                     $modalSettings = [
                         'elementId' => $element->id,
@@ -191,8 +192,9 @@ class EntryTemplates extends Plugin
                     $view->registerAssetBundle(ModalAsset::class);
                     $view->registerJs("new Craft.EntryTemplates.Modal($encodedModalSettings)");
 
-                    $html =  Craft::$app->view->renderTemplate('entrytemplates/_sidebar/entryTemplateSelect');
-                    $event->html .= $html;
+                    $html .= Craft::$app->view->renderTemplate('entrytemplates/_sidebar/entryTemplateSelect');
+                    $html .= $event->html;
+                    $event->html = $html;
                 }
             }
         );
