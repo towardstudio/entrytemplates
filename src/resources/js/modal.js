@@ -13,13 +13,14 @@ Craft.EntryTemplates.Modal = Garnish.Base.extend({
         });
 
         this.$settings = settings;
-
-        console.log(settings);
-
         this.$elements.default = class {
             constructor(t) {
                 var e;
-                this.id = t.id, this.title = t.title, this.preview = null !== (e = t.preview) && void 0 !== e ? e : 1, this.$button = $(this._button())
+                this.id = t.id,
+                this.title = t.title,
+                this.preview = null !== (e = t.preview) && void 0 !== e ? e : 1,
+                this.description = t.description,
+                this.$button = $(this._button())
             }
             _button() {
                 const t = $("<button />").append($("<p />").text(this.title)),
@@ -34,6 +35,12 @@ Craft.EntryTemplates.Modal = Garnish.Base.extend({
                         break;
                     default:
                         e.append($("<img />").attr("src", this.preview))
+                }
+
+                console.log(this);
+
+                if (this.description !== null) {
+                    t.append($('<p />').text(this.description))
                 }
                 return t;
             }
@@ -67,6 +74,18 @@ Craft.EntryTemplates.Modal = Garnish.Base.extend({
         const n = $('<div class="modal templates_modal" />');
         this.garnishModal = new Garnish.Modal(n);
 
+        // Hide Modal
+        this.garnishModal.hide();
+
+        // Show Modal
+        const templateButton = document.querySelector('button.template-modal');
+        const self = this;
+        templateButton.addEventListener('click', function () {
+            self.garnishModal.show();
+        });
+
+        console.log(this.$settings);
+
         const s = $('<div class="body" />').appendTo(n).append($('<h2 class="modal_heading" />').text(Craft.t("entrytemplates", "Choose a template"))),
             o = $('<div class="modal_container" />').appendTo(s);
 
@@ -75,7 +94,7 @@ Craft.EntryTemplates.Modal = Garnish.Base.extend({
         const defaults = this.$default;
 
         this.contentTemplates = [new elements.default({
-            title: Craft.t("entrytemplates", "Blank"),
+            title: Craft.t("entrytemplates", "No Changes"),
             preview: this.$default.default.Blank,
         })],
 

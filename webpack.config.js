@@ -35,21 +35,21 @@ module.exports = [
 			minimize: true,
 		},
 	},
-	{
-		entry: {
-			main: "./src/resources/js/preview.js",
-		},
-		output: {
-			filename: "preview.min.js",
-			path: path.resolve(__dirname, "src/resources/js/dist"),
-		},
-		mode: "development",
-		devtool: false,
-		resolve: {
-			extensions: [".js"],
-		},
-		optimization: {
-			minimize: true,
-		},
-	},
+	// {
+	// 	entry: {
+	// 		main: "./src/resources/js/preview.js",
+	// 	},
+	// 	output: {
+	// 		filename: "preview.min.js",
+	// 		path: path.resolve(__dirname, "src/resources/js/dist"),
+	// 	},
+	// 	mode: "development",
+	// 	devtool: false,
+	// 	resolve: {
+	// 		extensions: [".js"],
+	// 	},
+	// 	optimization: {
+	// 		minimize: true,
+	// 	},
+	// },
 ];

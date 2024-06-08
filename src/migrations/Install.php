@@ -39,7 +39,6 @@ class Install extends Migration
     {
 
         $this->dropTableIfExists('{{%towardtemplates}}');
-        $this->dropTableIfExists('{{%towardtemplatestructure}}');
 
         return true;
     }
@@ -61,21 +60,15 @@ class Install extends Migration
             $this->createTable('{{%towardtemplates}}', [
                 'id' => $this->integer()->notNull(),
                 'typeId' => $this->integer()->notNull(),
-                'previewImage' => $this->string(),
+                'structureId' => $this->integer()->notNull(),
+                'previewImage' => $this->integer(),
                 'description' => $this->string(),
+
                 'PRIMARY KEY([[id]])',
             ]);
             $this->createIndex(null, '{{%towardtemplates}}', ['typeId'], false);
             $this->addForeignKey(null, '{{%towardtemplates}}', ['id'], '{{%elements}}', ['id'], 'CASCADE', null);
             $this->addForeignKey(null, '{{%towardtemplates}}', ['typeId'], '{{%entrytypes}}', ['id'], 'CASCADE', null);
-
-            $this->createTable('{{%towardtemplatestructure}}', [
-                'typeId' => $this->integer()->notNull(),
-                'structureId' => $this->integer()->notNull(),
-                'PRIMARY KEY([[typeId]])',
-            ]);
-            $this->createIndex(null, '{{%towardtemplatestructure}}', ['typeId'], false);
-            $this->addForeignKey(null, '{{%towardtemplatestructure}}', ['typeId'], '{{%entrytypes}}', ['id'], 'CASCADE', null);
 
             return true;
         }

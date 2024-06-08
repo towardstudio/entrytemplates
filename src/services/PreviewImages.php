@@ -2,6 +2,7 @@
 namespace towardstudio\entrytemplates\services;
 
 use Craft;
+use craft\elements\Asset;
 use craft\helpers\App;
 use craft\helpers\FileHelper;
 use towardstudio\entrytemplates\EntryTemplates;
@@ -16,34 +17,18 @@ class PreviewImages extends Component
      * @param array|null $transform The width and height to scale/crop the image to.
      * @return string|null
      */
-    public function getPreviewImageUrl(string $filename, ?array $transform = null): ?string
+    public function getPreviewImageUrl(string $id, ?array $transform = null): ?string
     {
-        $previewSource = EntryTemplates::$plugin->getSettings()->previewSource;
-        $generalConfig = Craft::$app->getConfig()->getGeneral();
-        $resourceBasePath = rtrim(App::parseEnv($generalConfig->resourceBasePath), DIRECTORY_SEPARATOR);
-        $resourceBaseUrl = rtrim(App::parseEnv($generalConfig->resourceBaseUrl), DIRECTORY_SEPARATOR);
-        FileHelper::createDirectory($resourceBasePath . DIRECTORY_SEPARATOR . 'entrytemplates');
-        $imagePath = rtrim(App::parseEnv($previewSource), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . ltrim($filename, DIRECTORY_SEPARATOR);
-        $extension = FileHelper::getExtensionByMimeType(FileHelper::getMimeType($imagePath));
-        $size = $transform !== null ? "{$transform['width']}x{$transform['height']}" : 'full';
-        $relativeImageDest = 'entrytemplates' . DIRECTORY_SEPARATOR . hash('sha256', $imagePath) . "-$size.$extension";
-        $imageDestPath = $resourceBasePath . DIRECTORY_SEPARATOR . $relativeImageDest;
-        $imageDestUrl = $resourceBaseUrl . DIRECTORY_SEPARATOR . $relativeImageDest;
+        $asset = Asset::find()->id($id)->one();
 
-        if (!file_exists($imageDestPath)) {
-            try {
-                $image = Craft::$app->getImages()->loadImage($imagePath);
-
-                if ($transform !== null) {
-                    $image->scaleAndCrop($transform['width'], $transform['height']);
-                }
-
-                $image->saveAs($imageDestPath);
-            } catch (\Exception $e) {
-                return null;
-            }
+        if ($transform !== null) {
+            $asset = $asset->setTransform([
+                'width' => $transform['width'],
+                "height" => $transform['height'],
+                "position" => 'center-center'
+            ]);
         }
 
-        return $imageDestUrl;
+        return $asset->url;
     }
 }

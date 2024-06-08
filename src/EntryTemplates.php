@@ -9,21 +9,21 @@ use craft\base\Plugin;
 use craft\controllers\ElementsController;
 use craft\elements\Entry;
 use craft\events\DefineElementEditorHtmlEvent;
+use craft\events\DefineHtmlEvent;
+use craft\events\ModelEvent;
 use craft\events\RegisterComponentTypesEvent;
 use craft\events\RegisterUrlRulesEvent;
 use craft\helpers\Json;
 use craft\services\Elements;
-use craft\services\ProjectConfig;
 use craft\web\View;
 use craft\web\UrlManager;
+
 
 /* Plugin */
 use towardstudio\entrytemplates\assetbundles\ModalAsset;
 use towardstudio\entrytemplates\elements\EntryTemplate as EntryTemplateElements;
 use towardstudio\entrytemplates\models\Settings as SettingsModel;
 use towardstudio\entrytemplates\services\PreviewImages;
-use towardstudio\entrytemplates\services\ProjectConfig as TowardProjectConfig;
-
 
 /* Yii */
 use yii\base\Event;
@@ -64,16 +64,14 @@ class EntryTemplates extends Plugin
         // Components
         $this->setComponents([
             "previewImages" => PreviewImages::class,
-			"projectConfig" => TowardProjectConfig::class,
 		]);
 
         // Events
         $this->_registerElementTypes();
         $this->_registerCPRules();
         $this->_registerLogger();
-        $this->_registerProjectConfigApply();
-        $this->_registerProjectConfigRebuild();
-        $this->_registerModal();
+        $this->_registerSidebar();
+        // $this->_registerModal();
 	}
 
     // Rename the Control Panel Item & Add Sub Menu
@@ -152,74 +150,28 @@ class EntryTemplates extends Plugin
     }
 
     /**
-     * Listens for content template updates in the project config to apply them to the database.
+     * Registers sidebar meta box
      */
-    private function _registerProjectConfigApply(): void
-    {
-        Craft::$app->getProjectConfig()
-            ->onUpdate('entryTemplates.orders.{uid}', [$this->projectConfig, 'handleChangedContentTemplateOrder'])
-            ->onAdd('entryTemplates.templates.{uid}', [$this->projectConfig, 'handleChangedContentTemplate'])
-            ->onUpdate('entryTemplates.templates.{uid}', [$this->projectConfig, 'handleChangedContentTemplate'])
-            ->onRemove('entryTemplates.templates.{uid}', [$this->projectConfig, 'handleDeletedContentTemplate']);
-    }
-
-    /**
-     * Registers an event listener for a project config rebuild, and provides content template data from the database.
-     */
-    private function _registerProjectConfigRebuild(): void
-    {
-        Event::on(ProjectConfig::class, ProjectConfig::EVENT_REBUILD, function(RebuildConfigEvent $event) {
-            $entryTemplateConfig = [];
-            $entryTemplateOrdersConfig = [];
-
-            foreach (EntryTemplateElements::find()->withStructure(true)->all() as $entryTemplate) {
-                $config = $entryTemplate->getConfig();
-                $entryTemplateConfig[$entryTemplate->uid] = $config;
-                $entryTemplateOrdersConfig[$config['type']][$config['sortOrder']] = $entryTemplate->uid;
-            }
-
-            foreach ($entryTemplateOrdersConfig as $typeUid => $templateUids) {
-                $entryTemplateOrdersConfig[$typeUid] = array_values($templateUids);
-            }
-
-            $event->config['entryTemplates'] = [
-                'templates' => $entryTemplateConfig,
-                'orders' => $entryTemplateOrdersConfig,
-            ];
-        });
-    }
-
-    /**
-     * Listens for element editor content generation, and registers the content template selection modal if the element
-     * is an entry with no existing custom field content.
-     */
-    private function _registerModal(): void
+    private function _registerSidebar(): void
     {
         Event::on(
-            ElementsController::class,
-            ElementsController::EVENT_DEFINE_EDITOR_CONTENT,
-            function(DefineElementEditorHtmlEvent $event) {
-                $element = $event->element;
+            Element::class,
+            Element::EVENT_DEFINE_SIDEBAR_HTML,
+            function (DefineHtmlEvent $event) {
+                /** @var Element $element */
+                $element = $event->sender;
 
                 // We only support entries
                 if (!$element instanceof Entry) {
                     return;
                 }
 
-                // Register the modal for new drafts only
-                if (
-                    $element->draftId === null ||
-                    $element->canonicalId !== $element->id ||
-                    $element->dateCreated != $element->dateUpdated
-                ) {
-                    return;
-                }
-
-                $entryTemplates = EntryTemplateElements::find()
-                    ->typeId($element->typeId)
+                $entryTemplates = EntryTemplateElements::search()
+                    ->structureId($element->section->id)
                     ->collect();
 
                 if (!$entryTemplates->isEmpty()) {
+                    // Register Modal JS
                     $modalSettings = [
                         'elementId' => $element->id,
                         'entryTemplates' => $entryTemplates->map(fn($entryTemplate) => [
@@ -229,17 +181,20 @@ class EntryTemplates extends Plugin
                                 'width' => 232,
                                 'height' => 232,
                             ]),
+                            'description' => $entryTemplate->getDescription(),
                         ])->all(),
                     ];
                     $encodedModalSettings = Json::encode($modalSettings, JSON_UNESCAPED_UNICODE);
                     $view = Craft::$app->getView();
                     $view->registerAssetBundle(ModalAsset::class);
                     $view->registerJs("new Craft.EntryTemplates.Modal($encodedModalSettings)");
+
+                    $html =  Craft::$app->view->renderTemplate('entrytemplates/_sidebar/entryTemplateSelect');
+                    $event->html .= $html;
                 }
             }
         );
     }
-
 
     // Protected Methods
 	// =========================================================================
