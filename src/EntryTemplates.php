@@ -181,8 +181,8 @@ class EntryTemplates extends Plugin
                             'id' => $entryTemplate->id,
                             'title' => $entryTemplate->title,
                             'preview' => $entryTemplate->getPreviewImageUrl([
-                                'width' => 232,
-                                'height' => 232,
+                                'width' => 400,
+                                'height' => 400,
                             ]),
                             'description' => $entryTemplate->getDescription(),
                         ])->all(),

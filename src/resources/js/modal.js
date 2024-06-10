@@ -27,9 +27,6 @@ Craft.EntryTemplates.Modal = Garnish.Base.extend({
                     e = $("<div />").appendTo(t);
 
                 switch (this.preview) {
-                    case 0:
-                        t.addClass("is-blank");
-                        break;
                     case 1:
                         t.addClass("is-empty");
                         break;
@@ -38,7 +35,7 @@ Craft.EntryTemplates.Modal = Garnish.Base.extend({
                 }
 
                 if (this.description !== null) {
-                    t.append($('<p />').text(this.description))
+                    t.append($('<p class="description" />').text(this.description))
                 }
                 return t;
             }
@@ -52,6 +49,20 @@ Craft.EntryTemplates.Modal = Garnish.Base.extend({
             e = $("<div />").appendTo(t);
 
         return t;
+    },
+    _footer() {
+        let footerBar = document.createElement("div");
+        footerBar.classList.add('buttons', 'right');
+
+        let cancelButton = document.createElement('button');
+        cancelButton.setAttribute('type', 'button');
+        cancelButton.setAttribute('tabindex', '0');
+        cancelButton.classList.add('btn', 'template-cancel-btn');
+        cancelButton.innerText = 'Cancel';
+
+        footerBar.append(cancelButton);
+
+        return footerBar;
     },
     _addDefault() {
         Object.defineProperty(this.$default, "__esModule", {
@@ -86,14 +97,22 @@ Craft.EntryTemplates.Modal = Garnish.Base.extend({
             o = $('<div class="modal_container" />').appendTo(s),
             m = $('<div class="modal_inner" />').appendTo(o);
 
+        // Add Footer
+        const footer = $('<div class="footer" />').append(this._footer()).appendTo(o);
+        const cancelButton = document.querySelector('button.template-cancel-btn');
+
+        if (cancelButton) {
+            cancelButton.addEventListener('click', function () {
+                self.garnishModal.hide();
+            });
+        }
+
         const elements = this.$elements;
         const settings = this.$settings;
         const defaults = this.$default;
 
-        this.contentTemplates = [new elements.default({
-            title: Craft.t("entrytemplates", "No Changes"),
-            preview: this.$default.default.Blank,
-        })],
+        // Add Content Blocks
+        this.contentTemplates = [],
 
         this.contentTemplates.push(...settings.entryTemplates.map((defaults => new elements.default(defaults))));
 
@@ -102,19 +121,21 @@ Craft.EntryTemplates.Modal = Garnish.Base.extend({
             $('<div class="modal_block" />').append(t.$button).appendTo(m), t.$button.on("activate", (e => {
                 if (void 0 === t.id) this.garnishModal.hide();
                 else {
-                    n.addClass("applying");
-                    const e = {
-                        elementId: settings.elementId,
-                        entryTemplateId: t.id
-                    };
-                    Craft.sendActionRequest("POST", "entrytemplates/templates/apply", {
-                        data: e
-                    }).then((t => {
-                        window.location.href = t.data.redirect
-                    })).catch((t => {
-                        var e;
-                        n.removeClass("applying"), Craft.cp.displayError(null !== (e = t.error) && void 0 !== e ? e : Craft.t("entrytemplates", "An unknown error occurred."))
-                    }))
+                    if (confirm('Are you sure you want to apply this template? It will remove any content you may have already added.')) {
+                        n.addClass("applying");
+                        const e = {
+                            elementId: settings.elementId,
+                            entryTemplateId: t.id
+                        };
+                        Craft.sendActionRequest("POST", "entrytemplates/templates/apply", {
+                            data: e
+                        }).then((t => {
+                            window.location.href = t.data.redirect
+                        })).catch((t => {
+                            var e;
+                            n.removeClass("applying"), Craft.cp.displayError(null !== (e = t.error) && void 0 !== e ? e : Craft.t("entrytemplates", "An unknown error occurred."))
+                        }))
+                    }
                 }
             }))
         }));

@@ -18,7 +18,17 @@
 .modal_body {
     height: 100%;
     padding: 1.2rem;
-    overflow-y:scroll
+    position: relative;
+}
+
+.modal_container {
+    height: 100%;
+    .footer {
+        position: absolute;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+    }
 }
 
 .modal_heading {
@@ -27,28 +37,48 @@
 }
 
 .modal_inner {
-    display: flex;
-    flex-flow: row wrap;
+    display: grid;
+    overflow-y: scroll;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    height: 100%;
     justify-content: center;
+    padding-bottom:150px;
+    -ms-overflow-style: none;
+	scrollbar-width: none;
+
+	&::-webkit-scrollbar {
+		@apply bg-transparent w-0 h-0;
+	}
 }
 
 .modal_block {
-    display: flex;
-    flex-flow: column nowrap;
     margin: 8px;
-    width: 260px;
     text-align: center;
 
     > button {
+        height: 100%;
         display: flex;
         flex-flow: column nowrap;
-        flex-grow: 1;
-        padding: 1.5rem .5rem;
+        padding: 1.5rem;
         width: 100%;
         background-color: var(--gray-100);
+        transition: background-color .3s ease-in-out;
 
         > p {
+            margin: 0 0 1.5rem;
             font-weight: bold;
+        }
+
+        >.description {
+            margin: 1.5rem 0 0;
+            font-weight: normal;
+        }
+
+        &:hover {
+            background-color: var(--gray-050);
+            img {
+                transform: scale(1.1);
+            }
         }
 
     }
@@ -62,14 +92,29 @@
     }
 
     button > div {
-        margin: 0 auto var(--m);
-        width: 180px;
-        height: 180px;
+        width: 100%;
+        aspect-ratio: 1 / 1;
         background-size: 60%;
         background-position: center;
         background-repeat: no-repeat;
+        overflow: hidden;
+
+        img {
+            transition: transform .3s ease-in-out;
+        }
+
     }
 
+}
+
+@media (min-width: 1280px) {
+    .modal_body {
+        padding: 1.2rem 2.5rem;
+    }
+
+    .modal_inner {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
 }
 
 .ct_preview-image-select-menu {
