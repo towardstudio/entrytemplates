@@ -269,7 +269,7 @@ class EntryTemplates extends Plugin
 
         return [
             'entrytemplates:dashboard' => [
-                'label' => "Templates",
+                'label' => "View Templates",
             ],
         ];
     }
