@@ -22,6 +22,7 @@ use craft\web\UrlManager;
 use towardstudio\entrytemplates\assetbundles\ModalAsset;
 use towardstudio\entrytemplates\elements\EntryTemplate as EntryTemplateElements;
 use towardstudio\entrytemplates\services\PreviewImages;
+use towardstudio\entrytemplates\services\EntryTypes as EntryTypesService;
 
 /* Yii */
 use yii\base\Event;
@@ -59,6 +60,7 @@ class EntryTemplates extends Plugin
         // Components
         $this->setComponents([
             "previewImages" => PreviewImages::class,
+            "typeService" => EntryTypesService::class,
 		]);
 
         // Events
@@ -168,33 +170,37 @@ class EntryTemplates extends Plugin
                     return;
                 }
 
-                $entryTemplates = EntryTemplateElements::search()
-                    ->structureId($element->section->id)
-                    ->collect();
+                // If the Entry is connected to a section
+                if ($element->section)
+                {
+                    $entryTemplates = EntryTemplateElements::find()
+                        ->sectionIds($element->section->id)
+                        ->collect();
 
-                if (!$entryTemplates->isEmpty()) {
-                    $html = '';
-                    // Register Modal JS
-                    $modalSettings = [
-                        'elementId' => $element->id,
-                        'entryTemplates' => $entryTemplates->map(fn($entryTemplate) => [
-                            'id' => $entryTemplate->id,
-                            'title' => $entryTemplate->title,
-                            'preview' => $entryTemplate->getPreviewImageUrl([
-                                'width' => 400,
-                                'height' => 400,
-                            ]),
-                            'description' => $entryTemplate->getDescription(),
-                        ])->all(),
-                    ];
-                    $encodedModalSettings = Json::encode($modalSettings, JSON_UNESCAPED_UNICODE);
-                    $view = Craft::$app->getView();
-                    $view->registerAssetBundle(ModalAsset::class);
-                    $view->registerJs("new Craft.EntryTemplates.Modal($encodedModalSettings)");
+                    if (!$entryTemplates->isEmpty()) {
+                        $html = '';
+                        // Register Modal JS
+                        $modalSettings = [
+                            'elementId' => $element->id,
+                            'entryTemplates' => $entryTemplates->map(fn($entryTemplate) => [
+                                'id' => $entryTemplate->id,
+                                'title' => $entryTemplate->title,
+                                'preview' => $entryTemplate->getPreviewImageUrl([
+                                    'width' => 400,
+                                    'height' => 400,
+                                ]),
+                                'description' => $entryTemplate->getDescription(),
+                            ])->all(),
+                        ];
+                        $encodedModalSettings = Json::encode($modalSettings, JSON_UNESCAPED_UNICODE);
+                        $view = Craft::$app->getView();
+                        $view->registerAssetBundle(ModalAsset::class);
+                        $view->registerJs("new Craft.EntryTemplates.Modal($encodedModalSettings)");
 
-                    $html .= Craft::$app->view->renderTemplate('entrytemplates/_sidebar/entryTemplateSelect');
-                    $html .= $event->html;
-                    $event->html = $html;
+                        $html .= Craft::$app->view->renderTemplate('entrytemplates/_sidebar/entryTemplateSelect');
+                        $html .= $event->html;
+                        $event->html = $html;
+                    }
                 }
             }
         );
@@ -235,9 +241,8 @@ class EntryTemplates extends Plugin
         return [
             "entrytemplates" => "entrytemplates/templates/index",
             "entrytemplates/templates" => "entrytemplates/templates/index",
-            "entrytemplates/<sectionHandle:{handle}>" => "entrytemplates/templates/index",
-            "entrytemplates/<sectionHandle:{handle}>/<entryTypeHandle:{handle}>" => "entrytemplates/templates/index",
-            "entrytemplates/<sectionHandle:{handle}>/<entryTypeHandle:{handle}>/<elementId:\d+>" => "elements/edit",
+            "entrytemplates/<entryTypeHandle:{handle}>" => "entrytemplates/templates/index",
+            "entrytemplates/<entryTypeHandle:{handle}>/<elementId:\d+>" => "elements/edit",
         ];
     }
 

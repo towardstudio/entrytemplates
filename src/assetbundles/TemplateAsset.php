@@ -25,7 +25,7 @@ class TemplateAsset extends AssetBundle
         ];
 
         $this->js = [
-            'js/dist/index.min.js',
+            'js/index.js',
         ];
 
         parent::init();

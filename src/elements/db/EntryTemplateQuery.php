@@ -2,9 +2,12 @@
 
 namespace towardstudio\entrytemplates\elements\db;
 
+use Craft;
+use craft\elements\Entry;
 use craft\db\Query;
 use craft\elements\db\ElementQuery;
 use craft\db\Table;
+use craft\helpers\Db;
 
 /**
  * Content template element query class.
@@ -15,12 +18,15 @@ use craft\db\Table;
  */
 class EntryTemplateQuery extends ElementQuery
 {
-    public const TOWARDTEMPLATES = '{{%towardtemplates}}';
-
     /**
      * @var int[]|int|null The entry type ID(s) for this query.
      */
     public array|int|null $typeId = null;
+
+    /**
+     * @var int[]|int|null The entry type ID(s) for this query.
+     */
+    public array|string|null $sectionIds = null;
 
      /**
      * @var array[]|int|null The preview image ID(s) for this query.
@@ -41,6 +47,19 @@ class EntryTemplateQuery extends ElementQuery
     }
 
     /**
+     * Filters the query results based on the entry type sections.
+     *
+     * @param int[]|int|null $value The entry type section ID(s).
+     * @return self
+     */
+    public function sectionIds(array|int|null $value): self
+    {
+        $this->sectionIds = $value;
+
+        return $this;
+    }
+
+    /**
      * Filters the query results based on the entry type IDs.
      *
      * @param int[]|int|null $value The entry type ID(s).
@@ -53,23 +72,32 @@ class EntryTemplateQuery extends ElementQuery
         return $this;
     }
 
+    /**
+     * @inheritdoc
+     */
+    protected function fieldLayouts(): array
+    {
+        $layouts = Craft::$app->getFields()->getLayoutsByType(Entry::class);
+        return $layouts;
+    }
+
+    /**
+     * @inheritdoc
+     */
     protected function beforePrepare(): bool
     {
-        $this->_normalizeTypeId();
+        $this->joinElementTable('towardtemplates');
 
-        // See if 'type' as set to invalid handle
-        if ($this->typeId === []) {
-            return false;
-        }
-
-        $this->joinElementTable(self::TOWARDTEMPLATES);
-
-        $this->query->addSelect([
+        $this->query->select([
             'towardtemplates.id',
             'towardtemplates.typeId',
             'towardtemplates.previewImage',
             'towardtemplates.description',
         ]);
+
+        if ($this->draftId) {
+            $this->subQuery->andWhere(['elements.draftId' => $this->draftId]);
+        }
 
         if ($this->typeId) {
             $this->subQuery->andWhere(['towardtemplates.typeId' => $this->typeId]);
@@ -81,7 +109,7 @@ class EntryTemplateQuery extends ElementQuery
                 (is_numeric($this->typeId) || count($this->typeId) === 1)
             ) {
                 $structureId = (new Query())
-                    ->select(['structureId'])
+                    ->select(['sectionIds'])
                     ->from(['cts' => '{{%towardtemplates}}'])
                     ->where(['typeId' => $this->typeId])
                     ->scalar();
@@ -95,26 +123,6 @@ class EntryTemplateQuery extends ElementQuery
         }
 
         return parent::beforePrepare();
-    }
-
-    /**
-     * Normalizes the typeId param to an array of IDs or null
-     *
-     * @throws InvalidConfigException
-     */
-    private function _normalizeTypeId(): void
-    {
-        if (empty($this->typeId)) {
-            $this->typeId = is_array($this->typeId) ? [] : null;
-        } elseif (is_numeric($this->typeId)) {
-            $this->typeId = [$this->typeId];
-        } elseif (!is_array($this->typeId) || !ArrayHelper::isNumeric($this->typeId)) {
-            $this->typeId = (new Query())
-                ->select(['id'])
-                ->from([Table::ENTRYTYPES])
-                ->where(Db::parseNumericParam('id', $this->typeId))
-                ->column();
-        }
     }
 
 }

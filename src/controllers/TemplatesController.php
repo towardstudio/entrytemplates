@@ -41,7 +41,7 @@ class TemplatesController extends Controller
     public function actionIndex(): Response
     {
         return $this->renderTemplate('entrytemplates/_index.twig', [
-            'settings' => $this->_getEntryTypes(),
+            'settings' => EntryTemplates::$plugin->typeService->getAll(),
         ]);
     }
 
@@ -52,7 +52,7 @@ class TemplatesController extends Controller
      */
     public function actionTypes()
     {
-        return json_encode($this->_getEntryTypes());
+        return json_encode(EntryTemplates::$plugin->typeService->getAll());
     }
 
     /**
@@ -67,20 +67,14 @@ class TemplatesController extends Controller
         // Data
         $siteId = $data['siteId'];
         $typeHandle = $data['entryType'];
-        $sectionHandle = $data['section'];
+        $sectionIds = $data['sections'];
 
         // Section
-        $section = Craft::$app->getSections()->getSectionByHandle($sectionHandle);
-
-        if (!$section) {
-            throw new BadRequestHttpException("Invalid section handle: $sectionHandle");
-        }
-
-        // Entry Type
-        $entryType = ArrayHelper::firstWhere($section->getEntryTypes(), 'handle', $typeHandle);
+        $entryType = Craft::$app->getEntries()->getAllEntryTypes();
+        $entryType = ArrayHelper::firstWhere($entryType, 'handle', $typeHandle);
 
         if (!$entryType) {
-            throw new BadRequestHttpException("Invalid entry type handle: $typeHandle");
+            throw new BadRequestHttpException("Invalid entry type Ids: $sectionIds");
         }
 
         // Site
@@ -99,14 +93,14 @@ class TemplatesController extends Controller
             }
         }
 
-        $editableSiteIds = $section->getSiteIds();
+        $editableSiteIds = Craft::$app->sites->getEditableSiteIds();
 
-        if (!in_array($site->id, $editableSiteIds)) {
+         if (!in_array($site->id, $editableSiteIds)) {
             // If there’s more than one possibility and entries doesn’t propagate to all sites, let the user choose
-            if (count($editableSiteIds) > 1 && $section->propagationMethod !== Section::PROPAGATION_METHOD_ALL) {
+            if (count($editableSiteIds) > 1 && $entryType->propagationMethod !== Section::PROPAGATION_METHOD_ALL) {
                 return $this->renderTemplate('_special/sitepicker.twig', [
                     'siteIds' => $editableSiteIds,
-                    'baseUrl' => "entrytemplates/$section->handle-$entryType->handle/new",
+                    'baseUrl' => "entrytemplates/$entryType->handle/new",
                 ]);
             }
 
@@ -120,15 +114,13 @@ class TemplatesController extends Controller
         $template = Craft::createObject(EntryTemplateElements::class);
         $template->siteId = $site->id;
         $template->typeId = $entryType->id;
+        $template->sectionIds = $sectionIds;
 
         // Status
         if (($status = $this->request->getQueryParam('status')) !== null) {
             $enabled = $status === 'enabled';
         } else {
-            // Set the default status based on the section's settings
-            /** @var Section_SiteSettings $siteSettings */
-            $siteSettings = ArrayHelper::firstWhere($section->getSiteSettings(), 'siteId', $template->siteId);
-            $enabled = $siteSettings->enabledByDefault;
+            $enabled = true;
         }
         if (Craft::$app->getIsMultiSite() && count($template->getSupportedSites()) > 1) {
             $template->enabled = true;
@@ -142,7 +134,7 @@ class TemplatesController extends Controller
         $template->title = $this->request->getQueryParam('title');
 
         // Custom fields
-        foreach ($entryType->getFieldLayout()->getCustomFields() as $field) {
+        foreach ($template->getFieldLayout()->getCustomFields() as $field) {
             if (($value = $this->request->getQueryParam($field->handle)) !== null) {
                 $template->setFieldValue($field->handle, $value);
             }
@@ -220,34 +212,5 @@ class TemplatesController extends Controller
                 'fresh' => 1,
             ]),
         ]);
-    }
-
-
-    // Private Methods
-	// =========================================================================
-
-    /**
-     * Entry Types
-     *
-     * @return array The entry types
-    */
-    private function _getEntryTypes(): array
-    {
-        return [
-            'sections' => Collection::make(Craft::$app->getSections()->getEditableSections())
-                ->map(fn($section) => [
-                    'handle' => $section->handle,
-                    'sites' => $section->getSiteIds(),
-                    'entryTypes' => Collection::make($section->getEntryTypes())
-                        ->map(fn($entryType) => [
-                            'handle' => $entryType->handle,
-                            'id' => $entryType->id,
-                            'name' => Craft::t('site', $entryType->name),
-                            'uid' => $entryType->uid,
-                        ])
-                        ->all(),
-                ])
-                ->all(),
-        ];
     }
 }

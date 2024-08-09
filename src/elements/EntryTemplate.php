@@ -21,9 +21,10 @@ use craft\models\FieldLayout;
 use craft\models\Section;
 use ether\seo\fields\SeoField;
 
+use towardstudio\entrytemplates\EntryTemplates;
 use towardstudio\entrytemplates\elements\db\EntrySectionQuery;
 use towardstudio\entrytemplates\elements\db\EntryTemplateQuery;
-use towardstudio\entrytemplates\EntryTemplates;
+use towardstudio\entrytemplates\records\EntryTemplate as EntryTemplateRecord;
 
 use towardstudio\entrytemplates\assetbundles\PreviewImageAsset;
 use verbb\supertable\fields\SuperTableField;
@@ -46,7 +47,7 @@ class EntryTemplate extends Element
     /**
      * @var ?int The structure ID for this entry template.
      */
-    public ?int $structureId = null;
+    public array|string|null $sectionIds = null;
 
     /**
      * @var ?string The description for this entry template.
@@ -77,14 +78,6 @@ class EntryTemplate extends Element
     public static function lowerDisplayName(): string
     {
         return Craft::t('entrytemplates', 'entry template');
-    }
-
-    /**
-     * @inheritdoc
-     */
-    public static function hasContent(): bool
-    {
-        return true;
     }
 
     /**
@@ -130,42 +123,25 @@ class EntryTemplate extends Element
     /**
      * @inheritdoc
      */
-    /**
-     * @inheritdoc
-     */
     protected static function defineSources(string $context): array
     {
+        $entryTypes = EntryTemplates::$plugin->typeService->getAll();
         $sources = [];
-        $entryTypes = Craft::$app->getSections()->getAllEntryTypes();
 
-        foreach ($entryTypes as $entryType) {
-            $section = $entryType->getSection();
+        foreach ($entryTypes['entryTypes'] as $entryType) {
             $source = [
                 'key' => 'entryType:' . $entryType->uid,
-                'label' => Craft::t('site', $section->name . ' - ' . $entryType->name),
-                'sites' => $section->getSiteIds(),
+                'label' => Craft::t('site', $entryType->name),
+                'sites' => Craft::$app->sites->getEditableSiteIds(), // Update
                 'data' => [
-                    'handle' => $section->handle . '/' . $entryType->handle,
+                    'handle' => $entryType->handle,
                 ],
                 'criteria' => [
                     'typeId' => $entryType->id,
+                    'sectionIds' => serialize($entryType->sections),
                 ],
             ];
-            $structureId = (new Query())
-                ->select(['structureId'])
-                ->from(['cts' => '{{%towardtemplates}}'])
-                ->where(['typeId' => $entryType->id])
-                ->scalar();
-
-            if ($structureId) {
-                $user = Craft::$app->getUser()->getIdentity();
-                $source['defaultSort'] = ['structure', 'asc'];
-                $source['structureId'] = $structureId;
-                $source['structureEditable'] = $user && $user->can("saveEntries:$section->uid");
-            } else {
-                $source['defaultSort'] = ['postDate', 'desc'];
-            }
-
+            $source['defaultSort'] = ['postDate', 'desc'];
             $sources[] = $source;
         }
 
@@ -203,6 +179,37 @@ class EntryTemplate extends Element
     /**
      * @inheritdoc
      */
+    protected static function defineFieldLayouts(?string $source): array
+    {
+        if ($source !== null) {
+            if ($source === '*') {
+                $sections = Craft::$app->getEntries()->getAllSections();
+            } elseif ($source === 'singles') {
+                $sections = Craft::$app->getEntries()->getSectionsByType(Section::TYPE_SINGLE);
+            } else {
+                $sections = [];
+                if (preg_match('/^section:(.+)$/', $source, $matches)) {
+                    $section = Craft::$app->getEntries()->getSectionByUid($matches[1]);
+                    if ($section) {
+                        $sections[] = $section;
+                    }
+                }
+            }
+
+            $entryTypes = array_values(array_unique(array_merge(
+                ...array_map(fn(Section $section) => $section->getEntryTypes(), $sections),
+            )));
+        } else {
+            // get all entry types, including those which may only be used by Matrix fields
+            $entryTypes = Craft::$app->getEntries()->getAllEntryTypes();
+        }
+
+        return array_map(fn(EntryType $entryType) => $entryType->getFieldLayout(), $entryTypes);
+    }
+
+    /**
+     * @inheritdoc
+     */
     protected function defineRules(): array
     {
         $rules = parent::defineRules();
@@ -217,18 +224,16 @@ class EntryTemplate extends Element
     public function prepareEditScreen(Response $response, string $containerId): void
     {
         $entryType = $this->getEntryType();
-        $section = $this->getSection();
         $response->crumbs([
             [
                 'label' => self::pluralDisplayName(),
                 'url' => UrlHelper::cpUrl('entrytemplates'),
             ],
             [
-                'label' => Craft::t('site', '{section} - {entryType}', [
-                    'section' => $section->name,
+                'label' => Craft::t('site', '{entryType}', [
                     'entryType' => $entryType->name,
                 ]),
-                'url' => UrlHelper::cpUrl("entrytemplates/$section->handle/$entryType->handle"),
+                'url' => UrlHelper::cpUrl("entrytemplates/$entryType->handle"),
             ],
         ]);
     }
@@ -239,23 +244,39 @@ class EntryTemplate extends Element
     public function afterSave(bool $isNew): void
     {
         $entryType = $this->getEntryType();
-        $section = $entryType->getSection();
 
         // Request
         $request = Craft::$app->getRequest();
+        $elementId = $request->getBodyParam('elementId');
+        $sectionIds = $request->getBodyParam('sections');
+
         $this->previewImage = $request->getBodyParam('previewImage') ? $request->getBodyParam('previewImage')[0] : null;
         $this->description = $request->getBodyParam('description');
 
         // Add Data to database
         if (!$this->propagating) {
-           Db::upsert('{{%towardtemplates}}', [
-               'id' => $this->id,
-               'typeId' => $this->typeId,
-               'structureId' => $section->id,
-               'previewImage' => $this->previewImage,
-               'description' => $this->description,
-           ]);
-        }
+            if (!$sectionIds && !$isNew) {
+                $record = EntryTemplateRecord::findOne($this->id);
+
+                if (!$record) {
+                    throw new InvalidConfigException("Invalid entry templates ID: $this->id");
+                }
+
+                $record->previewImage = $this->previewImage;
+                $record->description = $this->description;
+
+                $record->save(false);
+            } else {
+                $record = new EntryTemplateRecord();
+                $record->id = (int)$this->id;
+                $record->typeId = (int)$this->typeId;
+                $record->sectionIds = serialize($sectionIds);
+                $record->previewImage = $this->previewImage;
+                $record->description = $this->description;
+
+                $record->save(false);
+            }
+        };
 
         parent::afterSave($isNew);
     }
@@ -297,21 +318,10 @@ class EntryTemplate extends Element
             : null;
     }
 
-    public function getSection(): ?Section
-    {
-        if ($this->_section === null && $this->typeId !== null) {
-            $this->_section = Craft::$app->getSections()->getSectionById($this->getEntryType()->sectionId);
-        }
-
-        return $this->_section;
-    }
-
     public function getEntryType(): ?EntryType
     {
         if ($this->_entryType === null && $this->typeId !== null) {
-            $this->_entryType = Craft::$app->getSections()->getEntryTypeById($this->typeId);
-            // Set the section while we're here
-            $this->getSection();
+            $this->_entryType = Craft::$app->entries->getEntryTypeById($this->typeId);
         }
 
         return $this->_entryType;
@@ -322,7 +332,8 @@ class EntryTemplate extends Element
      */
     public function canView(User $user): bool
     {
-        return $this->_can('view', $user);
+        $userSession = Craft::$app->getUser();
+        return $userSession->checkPermission("entrytemplates:dashboard");
     }
 
     /**
@@ -330,7 +341,8 @@ class EntryTemplate extends Element
      */
     public function canSave(User $user): bool
     {
-        return $this->_can('save', $user);
+        $userSession = Craft::$app->getUser();
+        return $userSession->checkPermission("entrytemplates:dashboard");
     }
 
     /**
@@ -338,10 +350,8 @@ class EntryTemplate extends Element
      */
     public function canDelete(User $user): bool
     {
-        // Fall back to the save permission for single sections, which would otherwise always return false
-        return $this->getSection()->type !== Section::TYPE_SINGLE
-            ? $this->_can('delete', $user)
-            : $this->_can('save', $user);
+        $userSession = Craft::$app->getUser();
+        return $userSession->checkPermission("entrytemplates:dashboard");
     }
 
     /**
@@ -410,8 +420,7 @@ class EntryTemplate extends Element
      */
     public function canCreateDrafts(User $user): bool
     {
-        // Everyone with view permissions can create drafts
-        return true;
+        return false;
     }
 
     /**
@@ -420,8 +429,7 @@ class EntryTemplate extends Element
     protected function cpEditUrl(): ?string
     {
         $entryType = $this->getEntryType();
-        $section = $entryType->getSection();
-        $path = sprintf('entrytemplates/%s/%s/%s', $section->handle, $entryType->handle, $this->getCanonicalId());
+        $path = sprintf('entrytemplates/%s/%s', $entryType->handle, $this->getCanonicalId());
 
         return UrlHelper::cpUrl($path);
     }
@@ -440,10 +448,6 @@ class EntryTemplate extends Element
     public function metaFieldsHtml(bool $static): string
     {
         $fields = [];
-
-        // echo '<pre>';
-        //     var_dump($this);
-        // echo '</pre>';
 
         // Title Field
         $fields[] = Cp::textFieldHtml([

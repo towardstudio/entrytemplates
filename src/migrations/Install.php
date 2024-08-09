@@ -60,7 +60,8 @@ class Install extends Migration
             $this->createTable('{{%towardtemplates}}', [
                 'id' => $this->integer()->notNull(),
                 'typeId' => $this->integer()->notNull(),
-                'structureId' => $this->integer()->notNull(),
+                'typeId' => $this->integer()->notNull(),
+                'sectionIds' => $this->integer()->notNull(),
                 'previewImage' => $this->integer(),
                 'description' => $this->string(),
 

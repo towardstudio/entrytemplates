@@ -1,5 +1,4 @@
 {% import '_includes/forms' as forms %}
-{% set value = value ?: null %}
 
 <div data-preview-image>
     {{ forms.elementSelectField({
@@ -8,10 +7,10 @@
 		name: "previewImage",
 		viewMode: "list",
 		elementType: 'craft\\elements\\Asset',
+        elements: (value) ? [value] : null,
 		selectionLabel: "Add",
 		required: false,
 		limit: 1,
-		elements: [value],
 		criteria: { kind: 'image'}
 	}) }}
 </div>

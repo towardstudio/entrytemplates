@@ -26,9 +26,9 @@ class EntrySectionQuery extends ElementQuery
      * Filters the query results based on the entry type IDs.
      *
      * @param int[]|int|null $value The entry type ID(s).
-     * @return self
+     * @return static
      */
-    public function structureId(?int $value = null): self
+    public function structureId(?int $value = null): static
     {
         $this->structureId = $value;
         return $this;
@@ -46,11 +46,11 @@ class EntrySectionQuery extends ElementQuery
         $this->query->addSelect([
             'towardtemplates.id',
             'towardtemplates.typeId',
-            'towardtemplates.structureId',
+            'towardtemplates.sectionIds',
             'towardtemplates.previewImage',
         ]);
 
-        $this->subQuery->andWhere(['towardtemplates.structureId' => $this->structureId]);
+        $this->subQuery->andWhere(['towardtemplates.sectionIds' => $this->structureId]);
 
         return parent::beforePrepare();
     }
