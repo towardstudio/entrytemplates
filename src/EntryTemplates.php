@@ -6,24 +6,23 @@ use Craft;
 use craft\base\Element;
 use craft\base\Model;
 use craft\base\Plugin;
-use craft\controllers\ElementsController;
 use craft\elements\Entry;
-use craft\events\DefineElementEditorHtmlEvent;
+use craft\events\DefineHtmlEvent;
 use craft\events\RegisterComponentTypesEvent;
 use craft\events\RegisterUrlRulesEvent;
+use craft\events\RegisterUserPermissionsEvent;
 use craft\helpers\Json;
 use craft\services\Elements;
-use craft\services\ProjectConfig;
+use craft\services\UserPermissions;
 use craft\web\View;
 use craft\web\UrlManager;
+
 
 /* Plugin */
 use towardstudio\entrytemplates\assetbundles\ModalAsset;
 use towardstudio\entrytemplates\elements\EntryTemplate as EntryTemplateElements;
-use towardstudio\entrytemplates\models\Settings as SettingsModel;
 use towardstudio\entrytemplates\services\PreviewImages;
-use towardstudio\entrytemplates\services\ProjectConfig as TowardProjectConfig;
-
+use towardstudio\entrytemplates\services\EntryTypes as EntryTypesService;
 
 /* Yii */
 use yii\base\Event;
@@ -46,8 +45,6 @@ class EntryTemplates extends Plugin
 
 	public static ?EntryTemplates $plugin;
     public bool $hasCpSection = true;
-	public bool $hasCpSettings = true;
-	public static ?SettingsModel $settings;
 
 	/**
 	 * @inheritdoc
@@ -56,7 +53,6 @@ class EntryTemplates extends Plugin
 	{
 		parent::init();
 		self::$plugin = $this;
-        self::$settings = $this->getSettings();
 
         // Create Custom Alias
 		Craft::setAlias('@entrytemplates', __DIR__);
@@ -64,33 +60,39 @@ class EntryTemplates extends Plugin
         // Components
         $this->setComponents([
             "previewImages" => PreviewImages::class,
-			"projectConfig" => TowardProjectConfig::class,
+            "typeService" => EntryTypesService::class,
 		]);
 
         // Events
         $this->_registerElementTypes();
         $this->_registerCPRules();
         $this->_registerLogger();
-        $this->_registerProjectConfigApply();
-        $this->_registerProjectConfigRebuild();
-        $this->_registerModal();
+        $this->_registerSidebar();
+        $this->_registerPermissions();
 	}
 
     // Rename the Control Panel Item & Add Sub Menu
 	public function getCpNavItem(): ?array
 	{
+        // Get current user
+        $currentUser = Craft::$app->getUser()->getIdentity();
+
 		// Get the site info
 		$handle = Craft::$app->sites->currentSite->handle;
 		$url = Craft::$app->sites->currentSite->baseUrl;
 
-		// Set additional information on the nav item
-		$item = parent::getCpNavItem();
+        if ($currentUser->can('entrytemplates:dashboard')) {
+            // Set additional information on the nav item
+		    $item = parent::getCpNavItem();
 
-        // Nav Item
-		$item["label"] = "Entry Templates";
-		$item["icon"] = "@entrytemplates/icons/nav.svg";
+            // Nav Item
+		    $item["label"] = "Entry Templates";
+		    $item["icon"] = "@entrytemplates/icons/nav.svg";
 
-		return $item;
+		    return $item;
+        } else {
+            return null;
+        }
 	}
 
     // Private Methods
@@ -152,94 +154,79 @@ class EntryTemplates extends Plugin
     }
 
     /**
-     * Listens for content template updates in the project config to apply them to the database.
+     * Registers sidebar meta box
      */
-    private function _registerProjectConfigApply(): void
-    {
-        Craft::$app->getProjectConfig()
-            ->onUpdate('entryTemplates.orders.{uid}', [$this->projectConfig, 'handleChangedContentTemplateOrder'])
-            ->onAdd('entryTemplates.templates.{uid}', [$this->projectConfig, 'handleChangedContentTemplate'])
-            ->onUpdate('entryTemplates.templates.{uid}', [$this->projectConfig, 'handleChangedContentTemplate'])
-            ->onRemove('entryTemplates.templates.{uid}', [$this->projectConfig, 'handleDeletedContentTemplate']);
-    }
-
-    /**
-     * Registers an event listener for a project config rebuild, and provides content template data from the database.
-     */
-    private function _registerProjectConfigRebuild(): void
-    {
-        Event::on(ProjectConfig::class, ProjectConfig::EVENT_REBUILD, function(RebuildConfigEvent $event) {
-            $entryTemplateConfig = [];
-            $entryTemplateOrdersConfig = [];
-
-            foreach (EntryTemplateElements::find()->withStructure(true)->all() as $entryTemplate) {
-                $config = $entryTemplate->getConfig();
-                $entryTemplateConfig[$entryTemplate->uid] = $config;
-                $entryTemplateOrdersConfig[$config['type']][$config['sortOrder']] = $entryTemplate->uid;
-            }
-
-            foreach ($entryTemplateOrdersConfig as $typeUid => $templateUids) {
-                $entryTemplateOrdersConfig[$typeUid] = array_values($templateUids);
-            }
-
-            $event->config['entryTemplates'] = [
-                'templates' => $entryTemplateConfig,
-                'orders' => $entryTemplateOrdersConfig,
-            ];
-        });
-    }
-
-    /**
-     * Listens for element editor content generation, and registers the content template selection modal if the element
-     * is an entry with no existing custom field content.
-     */
-    private function _registerModal(): void
+    private function _registerSidebar(): void
     {
         Event::on(
-            ElementsController::class,
-            ElementsController::EVENT_DEFINE_EDITOR_CONTENT,
-            function(DefineElementEditorHtmlEvent $event) {
-                $element = $event->element;
+            Element::class,
+            Element::EVENT_DEFINE_SIDEBAR_HTML,
+            function (DefineHtmlEvent $event) {
+                /** @var Element $element */
+                $element = $event->sender;
 
                 // We only support entries
                 if (!$element instanceof Entry) {
                     return;
                 }
 
-                // Register the modal for new drafts only
-                if (
-                    $element->draftId === null ||
-                    $element->canonicalId !== $element->id ||
-                    $element->dateCreated != $element->dateUpdated
-                ) {
-                    return;
-                }
+                // If the Entry is connected to a section
+                if ($element->section)
+                {
+                    $entryTemplates = EntryTemplateElements::find()
+                        ->sectionIds($element->section->id)
+                        ->collect();
 
-                $entryTemplates = EntryTemplateElements::find()
-                    ->typeId($element->typeId)
-                    ->collect();
+                    if (!$entryTemplates->isEmpty()) {
+                        $html = '';
+                        // Register Modal JS
+                        $modalSettings = [
+                            'elementId' => $element->id,
+                            'entryTemplates' => $entryTemplates->map(fn($entryTemplate) => [
+                                'id' => $entryTemplate->id,
+                                'title' => $entryTemplate->title,
+                                'preview' => $entryTemplate->getPreviewImageUrl([
+                                    'width' => 400,
+                                    'height' => 400,
+                                ]),
+                                'description' => $entryTemplate->getDescription(),
+                            ])->all(),
+                        ];
+                        $encodedModalSettings = Json::encode($modalSettings, JSON_UNESCAPED_UNICODE);
+                        $view = Craft::$app->getView();
+                        $view->registerAssetBundle(ModalAsset::class);
+                        $view->registerJs("new Craft.EntryTemplates.Modal($encodedModalSettings)");
 
-                if (!$entryTemplates->isEmpty()) {
-                    $modalSettings = [
-                        'elementId' => $element->id,
-                        'entryTemplates' => $entryTemplates->map(fn($entryTemplate) => [
-                            'id' => $entryTemplate->id,
-                            'title' => $entryTemplate->title,
-                            'preview' => $entryTemplate->getPreviewImageUrl([
-                                'width' => 232,
-                                'height' => 232,
-                            ]),
-                        ])->all(),
-                    ];
-                    $encodedModalSettings = Json::encode($modalSettings, JSON_UNESCAPED_UNICODE);
-                    $view = Craft::$app->getView();
-                    $view->registerAssetBundle(ModalAsset::class);
-                    $view->registerJs("new Craft.EntryTemplates.Modal($encodedModalSettings)");
+                        $html .= Craft::$app->view->renderTemplate('entrytemplates/_sidebar/entryTemplateSelect');
+                        $html .= $event->html;
+                        $event->html = $html;
+                    }
                 }
             }
         );
     }
 
+    /**
+     * Registers permissions
+     */
+    private function _registerPermissions(): void
+    {
+        Event::on(
+            UserPermissions::class,
+            UserPermissions::EVENT_REGISTER_PERMISSIONS,
+            function(RegisterUserPermissionsEvent $event) {
+                Craft::debug(
+                    'UserPermissions::EVENT_REGISTER_PERMISSIONS',
+                    __METHOD__
+                );
+                // Register our custom permissions
+                $event->permissions[] = [
+                    'heading' => 'Entry Templates',
+                    'permissions' => $this->customAdminCpPermissions(),
+                ];
+            }
+        );
+    }
 
     // Protected Methods
 	// =========================================================================
@@ -254,18 +241,9 @@ class EntryTemplates extends Plugin
         return [
             "entrytemplates" => "entrytemplates/templates/index",
             "entrytemplates/templates" => "entrytemplates/templates/index",
-            "entrytemplates/<sectionHandle:{handle}>" => "entrytemplates/templates/index",
-            "entrytemplates/<sectionHandle:{handle}>/<entryTypeHandle:{handle}>" => "entrytemplates/templates/index",
-            "entrytemplates/<sectionHandle:{handle}>/<entryTypeHandle:{handle}>/<elementId:\d+>" => "elements/edit",
+            "entrytemplates/<entryTypeHandle:{handle}>" => "entrytemplates/templates/index",
+            "entrytemplates/<entryTypeHandle:{handle}>/<elementId:\d+>" => "elements/edit",
         ];
-    }
-
-    /**
-     * @inheritdoc
-     */
-    protected function createSettingsModel(): ?Model
-    {
-        return new SettingsModel();
     }
 
     /**
@@ -277,4 +255,28 @@ class EntryTemplates extends Plugin
             'settings' => $this->getSettings(),
         ]);
     }
+
+    /**
+     * Returns the custom Control Panel user permissions.
+     *
+     * @return array
+     * @noinspection PhpArrayShapeAttributeCanBeAddedInspection
+     */
+    protected function customAdminCpPermissions(): array
+    {
+        // The script meta containers for the global meta bundle
+        try {
+            $currentSiteId = Craft::$app->getSites()->getCurrentSite()->id ?? 1;
+        } catch (SiteNotFoundException $e) {
+            $currentSiteId = 1;
+            Craft::error($e->getMessage(), __METHOD__);
+        }
+
+        return [
+            'entrytemplates:dashboard' => [
+                'label' => "View Templates",
+            ],
+        ];
+    }
+
 }

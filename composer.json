@@ -2,7 +2,7 @@
 	"name": "towardstudio/entry-templates",
 	"description": "Create pre-filled templates which can be selected within entries.",
 	"type": "craft-plugin",
-	"version": "1.0.0",
+	"version": "2.0.0",
 	"license": "MIT",
 	"authors": [
 		{
@@ -11,7 +11,7 @@
 		}
 	],
 	"require": {
-		"craftcms/cms": "^4.0.0"
+		"craftcms/cms": "^5.0.0"
 	},
 	"autoload": {
 		"psr-4": {

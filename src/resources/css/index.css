@@ -15,34 +15,74 @@
 }
 
 
+.modal_body {
+    height: 100%;
+    padding: 1.2rem;
+    position: relative;
+}
+
+.modal_container {
+    height: 100%;
+    .footer {
+        position: absolute;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+    }
+}
+
 .modal_heading {
     text-align: center;
     padding: 1rem 0;
 }
 
-.modal_container {
+.modal_inner {
+    --gap: 1rem;
+    --columns: 2;
     display: flex;
-    flex-flow: row wrap;
+    flex-wrap: wrap;
+    overflow-y: scroll;
+    height: 100%;
+    gap: var(--gap);
     justify-content: center;
+    padding-bottom:150px;
+    -ms-overflow-style: none;
+	scrollbar-width: none;
+
+	&::-webkit-scrollbar {
+		@apply bg-transparent w-0 h-0;
+	}
 }
 
 .modal_block {
-    display: flex;
-    flex-flow: column nowrap;
-    margin: 8px;
-    width: 260px;
     text-align: center;
+    width: calc((100% / var(--columns)) - var(--gap) + (var(--gap) / var(--columns)));
 
     > button {
+        height: 100%;
         display: flex;
         flex-flow: column nowrap;
-        flex-grow: 1;
-        padding: 1.5rem .5rem;
+        padding: 1.5rem;
         width: 100%;
+        border-radius: 0.5rem;
         background-color: var(--gray-100);
+        transition: background-color .3s ease-in-out;
 
         > p {
+            margin: 0 0 1.5rem;
             font-weight: bold;
+        }
+
+        >.description {
+            margin: 1.5rem 0 0;
+            font-weight: normal;
+        }
+
+        &:hover {
+            background-color: var(--gray-050);
+            img {
+                transform: scale(1.1);
+            }
         }
 
     }
@@ -56,14 +96,31 @@
     }
 
     button > div {
-        margin: 0 auto var(--m);
-        width: 180px;
-        height: 180px;
+        width: 100%;
+        aspect-ratio: 1 / 1;
         background-size: 60%;
         background-position: center;
         background-repeat: no-repeat;
+        overflow: hidden;
+
+        img {
+            transition: transform .3s ease-in-out;
+        }
+
     }
 
+}
+
+@media (min-width: 1280px) {
+    .modal_body {
+        padding: 1.2rem 2.5rem;
+    }
+
+    .modal_inner {
+        --gap: 1rem;
+        --columns: 3;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
 }
 
 .ct_preview-image-select-menu {
@@ -94,4 +151,9 @@
         }
 
     }
+}
+
+
+[data-preview-image] {
+    margin-left:25px;
 }

@@ -7,21 +7,24 @@ use craft\base\ElementInterface;
 use craft\base\FieldInterface;
 use craft\db\Query;
 use craft\db\Table;
+use craft\elements\Asset;
 use craft\elements\Entry;
 use craft\elements\User;
 use craft\fieldlayoutelements\entries\EntryTitleField;
 use craft\fields\Matrix as MatrixField;
 use craft\helpers\App;
 use craft\helpers\Cp;
-use craft\helpers\FileHelper;
+use craft\helpers\Db;
 use craft\helpers\UrlHelper;
 use craft\models\EntryType;
 use craft\models\FieldLayout;
 use craft\models\Section;
 use ether\seo\fields\SeoField;
 
-use towardstudio\entrytemplates\elements\db\EntryTemplateQuery;
 use towardstudio\entrytemplates\EntryTemplates;
+use towardstudio\entrytemplates\elements\db\EntrySectionQuery;
+use towardstudio\entrytemplates\elements\db\EntryTemplateQuery;
+use towardstudio\entrytemplates\records\EntryTemplate as EntryTemplateRecord;
 
 use towardstudio\entrytemplates\assetbundles\PreviewImageAsset;
 use verbb\supertable\fields\SuperTableField;
@@ -32,24 +35,24 @@ use yii\web\Response;
 class EntryTemplate extends Element
 {
     /**
-     * @var ?int The ID of the entry type this content template is for.
+     * @var ?int The ID of the entry type this entry template is for.
      */
     public ?int $typeId = null;
 
     /**
-     * @var string|null The content template's preview image filename.
+     * @var int|null The entry template's preview image ID.
      */
-    public ?string $previewImage = null;
+    public mixed $previewImage = null;
 
     /**
-     * @var ?string The description of this content template.
+     * @var ?int The structure ID for this entry template.
+     */
+    public array|string|null $sectionIds = null;
+
+    /**
+     * @var ?string The description for this entry template.
      */
     public ?string $description = null;
-
-    /**
-     * @var ?int The structure ID for this content template.
-     */
-    public ?int $structureId = null;
 
     /**
      * @var ?Section
@@ -75,14 +78,6 @@ class EntryTemplate extends Element
     public static function lowerDisplayName(): string
     {
         return Craft::t('entrytemplates', 'entry template');
-    }
-
-    /**
-     * @inheritdoc
-     */
-    public static function hasContent(): bool
-    {
-        return true;
     }
 
     /**
@@ -120,38 +115,33 @@ class EntryTemplate extends Element
     /**
      * @inheritdoc
      */
+    public static function search(): EntrySectionQuery
+    {
+        return new EntrySectionQuery(static::class);
+    }
+
+    /**
+     * @inheritdoc
+     */
     protected static function defineSources(string $context): array
     {
+        $entryTypes = EntryTemplates::$plugin->typeService->getAll();
         $sources = [];
 
-        foreach (Craft::$app->getSections()->getAllEntryTypes() as $entryType) {
-            $section = $entryType->getSection();
+        foreach ($entryTypes['entryTypes'] as $entryType) {
             $source = [
                 'key' => 'entryType:' . $entryType->uid,
-                'label' => Craft::t('site', $section->name . ' - ' . $entryType->name),
-                'sites' => $section->getSiteIds(),
+                'label' => Craft::t('site', $entryType->name),
+                'sites' => Craft::$app->sites->getEditableSiteIds(), // Update
                 'data' => [
-                    'handle' => $section->handle . '/' . $entryType->handle,
+                    'handle' => $entryType->handle,
                 ],
                 'criteria' => [
                     'typeId' => $entryType->id,
+                    'sectionIds' => serialize($entryType->sections),
                 ],
             ];
-            $structureId = (new Query())
-                ->select(['structureId'])
-                ->from(['cts' => '{{%towardtemplatestructure}}'])
-                ->where(['typeId' => $entryType->id])
-                ->scalar();
-
-            if ($structureId) {
-                $user = Craft::$app->getUser()->getIdentity();
-                $source['defaultSort'] = ['structure', 'asc'];
-                $source['structureId'] = $structureId;
-                $source['structureEditable'] = $user && $user->can("saveEntries:$section->uid");
-            } else {
-                $source['defaultSort'] = ['postDate', 'desc'];
-            }
-
+            $source['defaultSort'] = ['postDate', 'desc'];
             $sources[] = $source;
         }
 
@@ -189,11 +179,41 @@ class EntryTemplate extends Element
     /**
      * @inheritdoc
      */
+    protected static function defineFieldLayouts(?string $source): array
+    {
+        if ($source !== null) {
+            if ($source === '*') {
+                $sections = Craft::$app->getEntries()->getAllSections();
+            } elseif ($source === 'singles') {
+                $sections = Craft::$app->getEntries()->getSectionsByType(Section::TYPE_SINGLE);
+            } else {
+                $sections = [];
+                if (preg_match('/^section:(.+)$/', $source, $matches)) {
+                    $section = Craft::$app->getEntries()->getSectionByUid($matches[1]);
+                    if ($section) {
+                        $sections[] = $section;
+                    }
+                }
+            }
+
+            $entryTypes = array_values(array_unique(array_merge(
+                ...array_map(fn(Section $section) => $section->getEntryTypes(), $sections),
+            )));
+        } else {
+            // get all entry types, including those which may only be used by Matrix fields
+            $entryTypes = Craft::$app->getEntries()->getAllEntryTypes();
+        }
+
+        return array_map(fn(EntryType $entryType) => $entryType->getFieldLayout(), $entryTypes);
+    }
+
+    /**
+     * @inheritdoc
+     */
     protected function defineRules(): array
     {
         $rules = parent::defineRules();
         $rules[] = [['typeId'], 'number', 'integerOnly' => true];
-        $rules[] = [['description'], 'string'];
 
         return $rules;
     }
@@ -204,18 +224,16 @@ class EntryTemplate extends Element
     public function prepareEditScreen(Response $response, string $containerId): void
     {
         $entryType = $this->getEntryType();
-        $section = $this->getSection();
         $response->crumbs([
             [
                 'label' => self::pluralDisplayName(),
                 'url' => UrlHelper::cpUrl('entrytemplates'),
             ],
             [
-                'label' => Craft::t('site', '{section} - {entryType}', [
-                    'section' => $section->name,
+                'label' => Craft::t('site', '{entryType}', [
                     'entryType' => $entryType->name,
                 ]),
-                'url' => UrlHelper::cpUrl("entrytemplates/$section->handle/$entryType->handle"),
+                'url' => UrlHelper::cpUrl("entrytemplates/$entryType->handle"),
             ],
         ]);
     }
@@ -225,41 +243,40 @@ class EntryTemplate extends Element
      */
     public function afterSave(bool $isNew): void
     {
-        $projectConfig = Craft::$app->getProjectConfig();
+        $entryType = $this->getEntryType();
 
-        // If this element has saved as a result of applying project config changes, opt out of infinite recursion
-        if ($projectConfig->getIsApplyingExternalChanges()) {
-            return;
-        }
-
+        // Request
         $request = Craft::$app->getRequest();
-        $this->previewImage = $request->getBodyParam('previewImage') ?: null;
+        $elementId = $request->getBodyParam('elementId');
+        $sectionIds = $request->getBodyParam('sections');
+
+        $this->previewImage = $request->getBodyParam('previewImage') ? $request->getBodyParam('previewImage')[0] : null;
         $this->description = $request->getBodyParam('description');
-        $config = $this->getConfig();
 
-        if ($this->getIsDraft()) {
-            EntryTemplates::$plugin->projectConfig->save($this->uid, $config);
-        } else {
-            // Save the position in the order first
-            $sortOrder = $config['sortOrder'];
-            $typeOrderPath = "entryTemplates.orders.{$config['type']}";
-            $typeOrder = $projectConfig->get($typeOrderPath) ?? [];
-            $currentPositionInPath = array_search($this->uid, $typeOrder);
+        // Add Data to database
+        if (!$this->propagating) {
+            if (!$sectionIds && !$isNew) {
+                $record = EntryTemplateRecord::findOne($this->id);
 
-            if ($currentPositionInPath === false) {
-                // New content templates get added to the top
-                array_unshift($typeOrder, $this->uid);
-            } elseif ($currentPositionInPath !== $sortOrder) {
-                array_splice($typeOrder, $currentPositionInPath, 1);
-                array_splice($typeOrder, $sortOrder, 0, $this->uid);
+                if (!$record) {
+                    throw new InvalidConfigException("Invalid entry templates ID: $this->id");
+                }
+
+                $record->previewImage = $this->previewImage;
+                $record->description = $this->description;
+
+                $record->save(false);
+            } else {
+                $record = new EntryTemplateRecord();
+                $record->id = (int)$this->id;
+                $record->typeId = (int)$this->typeId;
+                $record->sectionIds = serialize($sectionIds);
+                $record->previewImage = $this->previewImage;
+                $record->description = $this->description;
+
+                $record->save(false);
             }
-
-            $projectConfig->set($typeOrderPath, $typeOrder);
-
-            // Now save the actual template config
-            unset($config['sortOrder']);
-            $projectConfig->set("entryTemplates.templates.$this->uid", $config);
-        }
+        };
 
         parent::afterSave($isNew);
     }
@@ -269,23 +286,23 @@ class EntryTemplate extends Element
      */
     public function afterDelete(): void
     {
-        $projectConfig = Craft::$app->getProjectConfig();
-
-        if (!$projectConfig->getIsApplyingExternalChanges()) {
-            // Remove this content template's data from the project config
-            $projectConfig->remove("entryTemplates.$this->uid");
-            $projectConfig = Craft::$app->getProjectConfig();
-            $projectConfig->remove("entryTemplates.templates.$this->uid");
-            $typeOrderPath = "entryTemplates.orders.{$this->getEntryType()->uid}";
-            $typeOrder = $projectConfig->get($typeOrderPath);
-
-            if ($typeOrder !== null && ($sortOrder = array_search($this->uid, $typeOrder)) !== false) {
-                array_splice($typeOrder, $sortOrder, 1);
-                $projectConfig->set($typeOrderPath, $typeOrder);
-            }
-        }
-
         parent::afterDelete();
+    }
+
+    /**
+     * Get the description
+     *
+     * @return string|null
+     */
+    public function getDescription(): ?string
+    {
+        $description = (new Query())
+            ->select(['description'])
+            ->from(['cts' => '{{%towardtemplates}}'])
+            ->where(['id' => $this->id])
+            ->scalar();
+
+        return $description ?: null;
     }
 
     /**
@@ -301,161 +318,10 @@ class EntryTemplate extends Element
             : null;
     }
 
-    /**
-     * Returns this content template's config.
-     *
-     * @return array
-     */
-    public function getConfig(): array
-    {
-        $request = Craft::$app->getRequest();
-
-        // Try to get `lft` from the structure elements table if we don't already have it
-        if (($lft = $this->lft) === null && $this->id !== null) {
-            $lft = (new Query())
-                ->select(['lft'])
-                ->from(Table::STRUCTUREELEMENTS)
-                ->where(['elementId' => $this->id])
-                ->scalar();
-        }
-
-        return [
-            'title' => $this->title,
-            'type' => $this->getEntryType()->uid,
-            'previewImage' => $this->previewImage,
-            'content' => $this->_sanitiseContent(),
-            'description' => method_exists($request, 'getBodyParam')
-                ? $this->description ?? $request->getBodyParam('description')
-                : $this->description,
-            'sortOrder' => $lft ? $lft / 2 - 1 : null,
-        ];
-    }
-
-    /**
-     * Sanitises values returned by fields' `serializeValue()` method for project config storage.
-     *
-     * - Removes  Matrix / Super Table block IDs from field values
-     * - Converts SEO field data to an array format
-     */
-    private function _sanitiseContent(
-        ?array $serializedValues = null,
-        ?int $fieldLayoutId = null
-    ): array {
-        if ($serializedValues === null) {
-            $serializedValues = $this->getSerializedFieldValues();
-        }
-
-        if ($fieldLayoutId === null) {
-            $fieldLayoutId = $this->getEntryType()->fieldLayoutId;
-        }
-
-        $elementsService = Craft::$app->getElements();
-        $fieldsService = Craft::$app->getFields();
-        $fields = [];
-
-        if ($fieldLayoutId !== null) {
-            foreach ($fieldsService->getLayoutById($fieldLayoutId)?->getCustomFieldElements() ?? [] as $customFieldElement) {
-                $field = $customFieldElement->getField();
-                $fields[$field->handle] = $field;
-            }
-        }
-
-        foreach (array_keys($serializedValues) as $fieldHandle) {
-            if (!isset($fields[$fieldHandle])) {
-                // Assume property rather than field
-                continue;
-            }
-
-            $field = $fields[$fieldHandle];
-            switch (get_class($field)) {
-                case MatrixField::class:
-                case SuperTableField::class:
-                    $serializedValues[$fieldHandle] = $this->_sanitiseContentFields(
-                        $serializedValues[$fieldHandle],
-                        $field,
-                    );
-                    break;
-                case SeoField::class:
-                    $serializedValues[$fieldHandle] = $this->_sanitiseSeoPluginValue($serializedValues[$fieldHandle]);
-            };
-        }
-
-        return $serializedValues;
-    }
-
-    /**
-     * Removes Matrix / Super Table block IDs from field values.
-     */
-    private function _sanitiseContentFields(array $fieldValue, FieldInterface $field): array
-    {
-        $fieldClass = get_class($field);
-        $i = 1;
-
-        foreach ($fieldValue as $oldBlockId => $blockValue) {
-            $blockLayoutId = match ($fieldClass) {
-                MatrixField::class => (new Query())
-                    ->select(['fieldLayoutId'])
-                    ->from(Table::MATRIXBLOCKTYPES)
-                    ->where([
-                        'fieldId' => $field->id,
-                        'handle' => $blockValue['type'],
-                    ])
-                    ->scalar(),
-                SuperTableField::class => SuperTable::$plugin->getService()
-                    ->getBlockTypeById($blockValue['type'])
-                    ->fieldLayoutId,
-            };
-            $blockValue['fields'] = $this->_sanitiseContent(
-                $blockValue['fields'],
-                $blockLayoutId,
-            );
-            $fieldValue['new' . $i++] = $blockValue;
-            unset($fieldValue[$oldBlockId]);
-        }
-
-        return $fieldValue;
-    }
-
-    /**
-     * Converts SEO field data to an array format.
-     */
-    private function _sanitiseSeoPluginValue(mixed $fieldValue): array
-    {
-        $socialValue = [];
-
-        foreach ($fieldValue->social as $name => $data) {
-            $socialValue[$name] = [
-                'image' => $data->imageId,
-                'title' => $data->title,
-                'description' => (string)$data->description,
-            ];
-        }
-
-        return [
-            'titleRaw' => $fieldValue->titleRaw,
-            'description' => $fieldValue->descriptionRaw,
-            'keywords' => $fieldValue->keywords,
-            'score' => $fieldValue->score,
-            'social' => $socialValue,
-            'advanced' => $fieldValue->advanced,
-        ];
-    }
-
-    public function getSection(): ?Section
-    {
-        if ($this->_section === null && $this->typeId !== null) {
-            $this->_section = Craft::$app->getSections()->getSectionById($this->getEntryType()->sectionId);
-        }
-
-        return $this->_section;
-    }
-
     public function getEntryType(): ?EntryType
     {
         if ($this->_entryType === null && $this->typeId !== null) {
-            $this->_entryType = Craft::$app->getSections()->getEntryTypeById($this->typeId);
-            // Set the section while we're here
-            $this->getSection();
+            $this->_entryType = Craft::$app->entries->getEntryTypeById($this->typeId);
         }
 
         return $this->_entryType;
@@ -466,7 +332,8 @@ class EntryTemplate extends Element
      */
     public function canView(User $user): bool
     {
-        return $this->_can('view', $user);
+        $userSession = Craft::$app->getUser();
+        return $userSession->checkPermission("entrytemplates:dashboard");
     }
 
     /**
@@ -474,7 +341,8 @@ class EntryTemplate extends Element
      */
     public function canSave(User $user): bool
     {
-        return $this->_can('save', $user);
+        $userSession = Craft::$app->getUser();
+        return $userSession->checkPermission("entrytemplates:dashboard");
     }
 
     /**
@@ -482,10 +350,8 @@ class EntryTemplate extends Element
      */
     public function canDelete(User $user): bool
     {
-        // Fall back to the save permission for single sections, which would otherwise always return false
-        return $this->getSection()->type !== Section::TYPE_SINGLE
-            ? $this->_can('delete', $user)
-            : $this->_can('save', $user);
+        $userSession = Craft::$app->getUser();
+        return $userSession->checkPermission("entrytemplates:dashboard");
     }
 
     /**
@@ -554,8 +420,7 @@ class EntryTemplate extends Element
      */
     public function canCreateDrafts(User $user): bool
     {
-        // Everyone with view permissions can create drafts
-        return true;
+        return false;
     }
 
     /**
@@ -564,8 +429,7 @@ class EntryTemplate extends Element
     protected function cpEditUrl(): ?string
     {
         $entryType = $this->getEntryType();
-        $section = $entryType->getSection();
-        $path = sprintf('entrytemplates/%s/%s/%s', $section->handle, $entryType->handle, $this->getCanonicalId());
+        $path = sprintf('entrytemplates/%s/%s', $entryType->handle, $this->getCanonicalId());
 
         return UrlHelper::cpUrl($path);
     }
@@ -597,50 +461,35 @@ class EntryTemplate extends Element
             'errors' => $this->getErrors('title'),
         ]);
 
-        // Get the preview image URLs for the add/replace menu, and also to store the valid URL for the set image
-        $previewSource = App::parseEnv(EntryTemplates::$plugin->getSettings()->previewSource);
-        $previewImagePaths = FileHelper::findFiles($previewSource, [
-            'only' => [
-                '*.jpeg',
-                '*.jpg',
-                '*.png',
-                '*.svg',
-            ],
-            'recursive' => false,
-        ]);
-        $previewImageUrls = [];
-        $setPreviewImageUrl = null;
-
-        foreach ($previewImagePaths as $path) {
-            $relativePath = substr($path, strlen($previewSource) + 1);
-            $previewImageUrl = EntryTemplates::$plugin->previewImages->getPreviewImageUrl(
-                substr($path, strlen($previewSource) + 1),
-                [
-                    'width' => 70,
-                    'height' => 70,
-                ]
-            );
-            $previewImageUrls[$relativePath] = $previewImageUrl;
-
-            if ($this->previewImage !== null && $this->previewImage === $relativePath) {
-                $setPreviewImageUrl = $previewImageUrl;
-            }
-        }
-
         if (!$static) {
             Craft::$app->getView()->registerAssetBundle(PreviewImageAsset::class);
         }
+
+        // Preview Image
+        $asset = $this->previewImage
+            ? $asset = Asset::find()->id($this->previewImage)->one() : null;
 
         $fields[] =  Cp::fieldHtml('template:entrytemplates/_preview-image', [
             'label' => Craft::t('entrytemplates', 'Preview Image'),
             'id' => 'previewImage',
             'name' => 'previewImage',
-            // If $setPreviewImageUrl is still null, the current previewImage is invalid
-            'value' => $setPreviewImageUrl !== null ? $this->previewImage : null,
-            'initialPreviewImageUrl' => $setPreviewImageUrl,
-            'previewImageUrls' => $previewImageUrls,
-            'disabled' => $static,
+            'value' => $asset,
             'errors' => $this->getErrors('previewImage'),
+        ]);
+
+        // Description
+        $fields[] = Cp::textareaFieldHtml([
+            'label' => Craft::t('entrytemplates', 'Description'),
+            'id' => 'description',
+            'name' => 'description',
+            'value' => $this->description,
+            'disabled' => $static,
+            'errors' => $this->getErrors('description'),
+            'inputAttributes' => [
+                'aria' => [
+                    'label' => Craft::t('entrytemplates', 'The description to use for this entry template.'),
+                ],
+            ],
         ]);
 
         $fields[] = parent::metaFieldsHtml($static);
