@@ -196,7 +196,7 @@ class TemplatesController extends Controller
         $contentTemplate = $elementsService->getElementById($entryTemplateId);
         $tempDuplicateTemplate = $elementsService->duplicateElement($contentTemplate);
         $element->setFieldValues($tempDuplicateTemplate->getSerializedFieldValues());
-        $element->title = 'Untitled';
+        $element->title = $element->title ?? 'Untitled';
         $element->slug = null;
         $element->typeId = $contentTemplate->typeId;
 
