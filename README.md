@@ -1,10 +1,10 @@
-# Entry Templates plugin for Craft CMS 4.x
+# Entry Templates plugin for Craft CMS 5.x
 
 Scaffold Entry Type Templates to use for a user to start with on new entries.
 
 ## Requirements
 
-This plugin requires Craft CMS 4 or later.
+This plugin requires Craft CMS 5 or later.
 
 ## Installation
 
