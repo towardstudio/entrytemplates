@@ -15,44 +15,44 @@ use craft\db\Table;
  */
 class EntrySectionQuery extends ElementQuery
 {
-    public const TOWARDTEMPLATES = '{{%towardtemplates}}';
+	/**
+	 * @var int|null The section ID(s) for this query.
+	 */
+	public array|string|null $sectionIds = null;
 
-    /**
-     * @var int|null The structure/section ID(s) for this query.
-     */
-    public mixed $structureId = null;
+	/**
+	 * Filters the query results based on the entry type IDs.
+	 *
+	 * @param int[]|int|null $value The entry type ID(s).
+	 * @return static
+	 */
+	public function sectionIds(array|int|null $value): self
+	{
+		$this->sectionIds = serialize($value);
 
-    /**
-     * Filters the query results based on the entry type IDs.
-     *
-     * @param int[]|int|null $value The entry type ID(s).
-     * @return static
-     */
-    public function structureId(?int $value = null): static
-    {
-        $this->structureId = $value;
-        return $this;
-    }
+		return $this;
+	}
 
-    protected function beforePrepare(): bool
-    {
-        // See if 'type' as set to invalid handle
-        if ($this->structureId === []) {
-            return false;
-        }
+	/**
+	 * @inheritdoc
+	 */
+	protected function beforePrepare(): bool
+	{
+		$this->joinElementTable("towardtemplates");
 
-        $this->joinElementTable(self::TOWARDTEMPLATES);
+		$this->query->select([
+			"towardtemplates.id",
+			"towardtemplates.previewImage",
+			"towardtemplates.description",
+			"towardtemplates.sectionIds",
+		]);
 
-        $this->query->addSelect([
-            'towardtemplates.id',
-            'towardtemplates.typeId',
-            'towardtemplates.sectionIds',
-            'towardtemplates.previewImage',
-        ]);
+		$this->subQuery->andWhere([
+			"like",
+			"towardtemplates.sectionIds",
+			$this->sectionIds,
+		]);
 
-        $this->subQuery->andWhere(['towardtemplates.sectionIds' => $this->structureId]);
-
-        return parent::beforePrepare();
-    }
-
+		return parent::beforePrepare();
+	}
 }
