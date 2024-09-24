@@ -21,7 +21,8 @@ class PreviewImages extends Component
     {
         $asset = Asset::find()->id($id)->one();
 
-        if ($asset) {
+        if ($asset)
+        {
             if ($transform !== null) {
                 $asset = $asset->setTransform([
                     'width' => $transform['width'],
@@ -31,8 +32,9 @@ class PreviewImages extends Component
             }
 
             return $asset->url;
-        } else {
-            return null;
         }
+
+        return null;
+
     }
 }
