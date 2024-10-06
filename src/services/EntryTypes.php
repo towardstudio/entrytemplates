@@ -3,6 +3,10 @@ namespace towardstudio\entrytemplates\services;
 
 use Craft;
 use craft\models\Section as SectionModel;
+
+use towardstudio\entrytemplates\records\EntryTemplate as EntryTemplateRecord;
+use towardstudio\entrytemplates\elements\EntryTemplate as EntryTemplateElement;
+
 use yii\base\Component;
 
 // Illuminate
@@ -61,4 +65,61 @@ class EntryTypes extends Component
             'entryTypes' => $availableTypes,
         ];
     }
+
+    public function removeSectionIdFromRecord(int $sectionId): void
+    {
+        $records = EntryTemplateRecord::find()
+            ->where(['like', 'sectionIds', $sectionId])
+            ->all();
+
+
+        if ($records)
+        {
+            $transaction = Craft::$app->getDb()->beginTransaction();
+
+            foreach ($records as $record)
+            {
+                $ids = unserialize($record->sectionIds);
+                unset($ids[array_search($sectionId, $ids)]);
+                $record->setAttribute('sectionIds', serialize($ids));
+                $record->save();
+            }
+
+            $transaction->commit();
+        }
+    }
+
+
+    public function updateRecord(array $types, int $sectionId): void
+    {
+        $ids = array_column($types, 'id');
+
+        $transaction = Craft::$app->getDb()->beginTransaction();
+
+        foreach($ids as $id)
+        {
+            $record = EntryTemplateRecord::find()
+                ->where('typeId=:typeId')
+                ->addParams(['typeId' => (int)$id])
+                ->one();
+
+            if ($record)
+            {
+                $ids = unserialize($record->sectionIds);
+
+                if (!in_array($sectionId, $ids))
+                {
+                    array_push($ids, $sectionId);
+                }
+
+                $record->setAttribute('sectionIds', serialize($ids));
+                $record->save();
+
+            }
+        }
+
+        $transaction->commit();
+
+    }
+
 }
