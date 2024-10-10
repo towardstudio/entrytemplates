@@ -11,8 +11,10 @@ use craft\events\DefineHtmlEvent;
 use craft\events\RegisterComponentTypesEvent;
 use craft\events\RegisterUrlRulesEvent;
 use craft\events\RegisterUserPermissionsEvent;
+use craft\events\SectionEvent;
 use craft\helpers\Json;
 use craft\services\Elements;
+use craft\services\Entries;
 use craft\services\UserPermissions;
 use craft\web\View;
 use craft\web\UrlManager;
@@ -67,6 +69,7 @@ class EntryTemplates extends Plugin
 		$this->_registerCPRules();
 		$this->_registerLogger();
 		$this->_registerSidebar();
+        $this->_addSectionAfterSave();
 		$this->_registerPermissions();
 	}
 
@@ -236,6 +239,33 @@ class EntryTemplates extends Plugin
 			}
 		);
 	}
+
+    private function _addSectionAfterSave(): void
+    {
+        // Install for all requests
+        Event::on(
+            Entries::class,
+            Entries::EVENT_BEFORE_SAVE_SECTION,
+            function(SectionEvent $event) {
+                // Get section
+                $section = $event->section;
+
+                // Get section Id
+                $id = $section->id;
+
+                // Fist we want to remove the Section ID from all records
+                self::$plugin->typeService->removeSectionIdFromRecord($id);
+
+                // Get entry types
+                $entryTypes = $section->entryTypes;
+
+                if ($entryTypes)
+                {
+                    self::$plugin->typeService->updateRecord($entryTypes, $id);
+                }
+            }
+        );
+    }
 
 	// Protected Methods
 	// =========================================================================

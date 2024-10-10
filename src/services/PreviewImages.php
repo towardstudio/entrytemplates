@@ -21,14 +21,20 @@ class PreviewImages extends Component
     {
         $asset = Asset::find()->id($id)->one();
 
-        if ($transform !== null) {
-            $asset = $asset->setTransform([
-                'width' => $transform['width'],
-                "height" => $transform['height'],
-                "position" => 'center-center'
-            ]);
+        if ($asset)
+        {
+            if ($transform !== null) {
+                $asset = $asset->setTransform([
+                    'width' => $transform['width'],
+                    "height" => $transform['height'],
+                    "position" => 'center-center'
+                ]);
+            }
+
+            return $asset->url;
         }
 
-        return $asset->url;
+        return null;
+
     }
 }
