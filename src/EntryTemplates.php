@@ -15,6 +15,7 @@ use craft\events\SectionEvent;
 use craft\helpers\Json;
 use craft\services\Elements;
 use craft\services\Entries;
+use craft\services\ProjectConfig;
 use craft\services\UserPermissions;
 use craft\web\View;
 use craft\web\UrlManager;
@@ -69,8 +70,13 @@ class EntryTemplates extends Plugin
 		$this->_registerCPRules();
 		$this->_registerLogger();
 		$this->_registerSidebar();
-        $this->_addSectionAfterSave();
 		$this->_registerPermissions();
+
+        // Check for Project Config changes
+        $projectConfig = Craft::$app->getProjectConfig()
+            ->onUpdate(ProjectConfig::PATH_SECTIONS . '.{uid}', function (Event $e) {
+                self::$plugin->typeService->handleUpdatedSectionTypes($e);
+            });
 	}
 
 	// Rename the Control Panel Item & Add Sub Menu
@@ -239,33 +245,6 @@ class EntryTemplates extends Plugin
 			}
 		);
 	}
-
-    private function _addSectionAfterSave(): void
-    {
-        // Install for all requests
-        Event::on(
-            Entries::class,
-            Entries::EVENT_BEFORE_SAVE_SECTION,
-            function(SectionEvent $event) {
-                // Get section
-                $section = $event->section;
-
-                // Get section Id
-                $id = $section->id;
-
-                // Fist we want to remove the Section ID from all records
-                self::$plugin->typeService->removeSectionIdFromRecord($id);
-
-                // Get entry types
-                $entryTypes = $section->entryTypes;
-
-                if ($entryTypes)
-                {
-                    self::$plugin->typeService->updateRecord($entryTypes, $id);
-                }
-            }
-        );
-    }
 
 	// Protected Methods
 	// =========================================================================

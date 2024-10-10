@@ -2,12 +2,16 @@
 namespace towardstudio\entrytemplates\services;
 
 use Craft;
+use craft\events\ConfigEvent;
 use craft\models\Section as SectionModel;
+use craft\services\Entries;
+use craft\records\Section as SectionRecord;
 
 use towardstudio\entrytemplates\records\EntryTemplate as EntryTemplateRecord;
 use towardstudio\entrytemplates\elements\EntryTemplate as EntryTemplateElement;
 
 use yii\base\Component;
+use Throwable;
 
 // Illuminate
 use Illuminate\Support\Collection;
@@ -89,7 +93,6 @@ class EntryTypes extends Component
         }
     }
 
-
     public function updateRecord(array $types, int $sectionId): void
     {
         $ids = array_column($types, 'id');
@@ -122,4 +125,53 @@ class EntryTypes extends Component
 
     }
 
+    public function handleUpdatedSectionTypes(ConfigEvent $event)
+    {
+        $sectionUid = $event->tokenMatches[0];
+
+        try {
+            $sectionRecord = $this->_getSectionRecord($sectionUid, true);
+        } catch (Throwable $e) {
+            throw $e;
+        }
+
+        $sectionId = $sectionRecord->id;
+
+        if ($sectionId)
+        {
+            $section = Craft::$app->entries->getSectionById($sectionId);
+
+            if ($section) {
+
+                // Fist we want to remove the Section ID from all records
+                $this->removeSectionIdFromRecord($sectionId);
+
+                // Get entry types
+                $entryTypes = $section->entryTypes;
+
+                if ($entryTypes)
+                {
+                    $this->updateRecord($entryTypes, $sectionId);
+                }
+
+            }
+        }
+    }
+
+
+    /**
+     * Gets a sections's record by uid.
+     *
+     * @param string $uid
+     * @param bool $withTrashed Whether to include trashed sections in search
+     * @return SectionRecord
+     */
+    private function _getSectionRecord(string $uid, bool $withTrashed = false): SectionRecord
+    {
+        $query = $withTrashed ? SectionRecord::findWithTrashed() : SectionRecord::find();
+        $query->andWhere(['uid' => $uid]);
+        /** @noinspection PhpIncompatibleReturnTypeInspection */
+        /** @var SectionRecord */
+        return $query->one() ?? new SectionRecord();
+    }
 }
