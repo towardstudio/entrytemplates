@@ -10,71 +10,87 @@ use craft\db\Migration;
  */
 class Install extends Migration
 {
-    // Public Properties
-    // =========================================================================
+	// Public Properties
+	// =========================================================================
 
-    /**
-     * @var ?string The database driver to use
-     */
-    public ?string $driver = null;
+	/**
+	 * @var ?string The database driver to use
+	 */
+	public ?string $driver = null;
 
-    /**
-     * @inheritdoc
-     */
-    public function safeUp(): bool
-    {
-        $this->driver = Craft::$app->getConfig()->getDb()->driver;
-        if ($this->createTables()) {
-            // Refresh the db schema caches
-            Craft::$app->db->schema->refresh();
-        }
+	/**
+	 * @inheritdoc
+	 */
+	public function safeUp(): bool
+	{
+		$this->driver = Craft::$app->getConfig()->getDb()->driver;
+		if ($this->createTables()) {
+			// Refresh the db schema caches
+			Craft::$app->db->schema->refresh();
+		}
 
-        return true;
-    }
+		return true;
+	}
 
-    /**
-     * @inheritdoc
-     */
-    public function safeDown(): bool
-    {
+	/**
+	 * @inheritdoc
+	 */
+	public function safeDown(): bool
+	{
+		$this->dropTableIfExists("{{%towardtemplates}}");
 
-        $this->dropTableIfExists('{{%towardtemplates}}');
+		return true;
+	}
 
-        return true;
-    }
+	// Protected Properties
+	// =========================================================================
 
-    // Protected Properties
-    // =========================================================================
+	/**
+	 * @return bool
+	 */
+	protected function createTables(): bool
+	{
+		$tablesCreated = false;
 
-    /**
-     * @return bool
-     */
-    protected function createTables(): bool
-    {
-        $tablesCreated = false;
+		$tableSchema = Craft::$app->db->schema->getTableSchema(
+			"{{%towardtemplates}}"
+		);
+		if ($tableSchema === null) {
+			$tablesCreated = true;
 
-        $tableSchema = Craft::$app->db->schema->getTableSchema('{{%towardtemplates}}');
-        if ($tableSchema === null) {
-            $tablesCreated = true;
+			$this->createTable("{{%towardtemplates}}", [
+				"id" => $this->integer()->notNull(),
+				"typeId" => $this->integer()->notNull(),
+				"typeId" => $this->integer()->notNull(),
+				"sectionIds" => $this->string(),
+				"previewImage" => $this->integer(),
+				"description" => $this->string(),
 
-            $this->createTable('{{%towardtemplates}}', [
-                'id' => $this->integer()->notNull(),
-                'typeId' => $this->integer()->notNull(),
-                'typeId' => $this->integer()->notNull(),
-                'sectionIds' => $this->integer()->notNull(),
-                'previewImage' => $this->integer(),
-                'description' => $this->string(),
+				"PRIMARY KEY([[id]])",
+			]);
+			$this->createIndex(null, "{{%towardtemplates}}", ["typeId"], false);
+			$this->addForeignKey(
+				null,
+				"{{%towardtemplates}}",
+				["id"],
+				"{{%elements}}",
+				["id"],
+				"CASCADE",
+				null
+			);
+			$this->addForeignKey(
+				null,
+				"{{%towardtemplates}}",
+				["typeId"],
+				"{{%entrytypes}}",
+				["id"],
+				"CASCADE",
+				null
+			);
 
-                'PRIMARY KEY([[id]])',
-            ]);
-            $this->createIndex(null, '{{%towardtemplates}}', ['typeId'], false);
-            $this->addForeignKey(null, '{{%towardtemplates}}', ['id'], '{{%elements}}', ['id'], 'CASCADE', null);
-            $this->addForeignKey(null, '{{%towardtemplates}}', ['typeId'], '{{%entrytypes}}', ['id'], 'CASCADE', null);
+			return true;
+		}
 
-            return true;
-        }
-
-        return $tablesCreated;
-    }
-
+		return $tablesCreated;
+	}
 }
