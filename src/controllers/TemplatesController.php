@@ -6,6 +6,7 @@ use towardstudio\entrytemplates\EntryTemplates;
 // Craft
 use Craft;
 use craft\base\Element;
+use craft\elements\Entry;
 use craft\helpers\ArrayHelper;
 use craft\helpers\UrlHelper;
 use craft\web\Controller;
@@ -22,6 +23,9 @@ use yii\base\InvalidConfigException;
 use yii\web\NotFoundHttpException;
 use yii\web\BadRequestHttpException;
 use yii\web\Response;
+
+// Basic
+use DateTime;
 
 class TemplatesController extends Controller
 {
@@ -195,6 +199,7 @@ class TemplatesController extends Controller
 
         $contentTemplate = $elementsService->getElementById($entryTemplateId);
         $tempDuplicateTemplate = $elementsService->duplicateElement($contentTemplate);
+
         $element->setFieldValues($tempDuplicateTemplate->getSerializedFieldValues());
         $element->title = $element->title ?? 'Untitled';
         $element->slug = null;
@@ -205,6 +210,22 @@ class TemplatesController extends Controller
 
         if (!$success) {
             return $this->asFailure('Failed to apply content template to ' . $element::lowerDisplayName());
+        }
+
+        // Find all nested elements that have been created, and have no post date
+        $nestedElements = Entry::find()
+            ->status(null)
+            ->ownerId($element->id)
+            ->postDate(null)
+            ->all();
+
+        if ($nestedElements)
+        {
+            foreach ($nestedElements as $nested)
+            {
+                $nested->postDate = new DateTime();
+                $success = $elementsService->saveElement($nested);
+            }
         }
 
         return $this->asSuccess(data: [
