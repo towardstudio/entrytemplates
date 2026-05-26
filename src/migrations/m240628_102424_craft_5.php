@@ -4,6 +4,7 @@ namespace towardstudio\entrytemplates\migrations;
 
 use Craft;
 use craft\db\Migration;
+use craft\db\Query;
 use craft\models\FieldLayout;
 
 use towardstudio\entrytemplates\records\EntryTemplate;
